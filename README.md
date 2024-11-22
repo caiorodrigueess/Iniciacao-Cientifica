@@ -1,5 +1,5 @@
 # Projeto de Iniciação Científica
-
+Bem-vindo ao repositório oficial do projeto de iniciação científica do aluno Caio Rodrigues, discente de Engenharia de Telecomunicações na Universidade Federal do Ceará (UFC).
 Este projeto tem como objetivo explorar e desenvolver soluções para problemas emergentes na área de telecomunicações, com ênfase em redes móveis.
 
 ## Sobre o Projeto
