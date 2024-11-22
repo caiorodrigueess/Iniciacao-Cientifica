@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 
 # Parâmetros iniciais
 n_pontos = 500
-n_simulacoes = 1000
+n_sim = 1000
 centro_x, centro_y = 0.5, 0.5
 raio = 0.5
 
@@ -11,8 +11,8 @@ raio = 0.5
 x = np.random.rand(n_pontos)
 y = np.random.rand(n_pontos)
 
-dist_cp = (x - centro_x)**2 + (y - centro_y)**2
-dentro_do_circulo = dist_cp <= raio
+dist_cp = np.sqrt((x - centro_x)**2 + (y - centro_y)**2)        # Atribui o módulo do ponto no plano
+dentro_do_circulo = dist_cp <= raio                             # Verifica se o ponto está dentro do circulo
 
 # Criar o gráfico dos pontos
 plt.figure(figsize=(6, 6))
@@ -38,18 +38,21 @@ plt.show()
 estimativas_area = []
 contagem_dentro = 0
 
-for i in range(1, n_simulacoes + 1):    # Inicia um laço para rodar o número de simulações
-    id = np.random.randn(n_pontos)      # Escolhe um ponto aleatório dentre os 500
-    if dist_cp[id] <= raio**2:          # Verifica se o ponto está dentro do circulo
-        contagem_dentro+=1              # Incrementa o número de pontos dentro do circulo
-    
-    area_estimada = 4 * (contagem_dentro / i) * raio**2
+for i in range(1, n_sim + 1):               # Inicia um laço para rodar o número de simulações
+    id = np.random.randint(n_pontos)        # Escolhe um ponto aleatório dentre os 500
+    if dist_cp[id] <= raio:                 # Verifica se o ponto está dentro do circulo
+        contagem_dentro+=1                  # Incrementa o número de pontos dentro do circulo
+    area_estimada = (contagem_dentro / i) * (4 * raio**2)   # Razão do número de pontos dentro * (área do quadrado de lado 2*raio)
     estimativas_area.append(area_estimada)
 
+estimativas_area.sort()
+print(f'10th: {round(estimativas_area[100], 4)}')
+print(f'50th: {round(estimativas_area[500], 4)}')
+print(f'90th: {round(estimativas_area[900], 4)}')
 
 # Plotar o gráfico das estimativas de área
 plt.figure(figsize=(10, 6))
-plt.plot(range(1, n_simulacoes + 1), estimativas_area, label='Estimativa da Área')
+plt.plot(range(1, n_sim + 1), estimativas_area, label='Estimativa da Área')
 plt.axhline(y=np.pi * raio**2, color='r', linestyle='--', label='Área real do círculo')
 
 # Configurar o gráfico
@@ -59,4 +62,3 @@ plt.ylabel('Estimativa da Área')
 plt.legend()
 plt.grid(True)
 plt.show()
-    
