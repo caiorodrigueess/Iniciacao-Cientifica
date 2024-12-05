@@ -14,7 +14,7 @@ A rápida evolução das redes móveis trouxe novas possibilidades e desafios pa
 
 1. Estudo e análise teórica
 
-- Explorar fundamentos sobre arquiteturas de redes móveis e suas evoluções (3G, 4G, 5G).
+- Explorar fundamentos sobre arquiteturas de redes móveis e suas evoluções (4G, 5G e 6G).
 - Entender os desafios relacionados a latência, capacidade espectral e gerência de banda.
 
 2. Simulações e experimentos
