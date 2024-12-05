@@ -22,7 +22,7 @@ A rápida evolução das redes móveis trouxe novas possibilidades e desafios pa
 - Implementar simulações utilizando Python como ferramenta de modelagem de redes.
 - Validar cenários de aplicação focados no usuário.
 
-3.Resultados e publicações
+3. Resultados e publicações
 
 - Gerar relatórios técnicos.
 - Publicar artigos e apresentar os resultados em conferências ou eventos científicos.
