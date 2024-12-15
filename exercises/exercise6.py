@@ -22,10 +22,7 @@ def main():
     print("Item a): ")
 
     y11 = pr(pt, k, d11, n)/(pr(pt, k, d12, n) + pn(k0, bt, N))
-    print(pr(pt, k, d11, n), pn(k0, bt, N))
     y22 = pr(pt, k, d22, n)/(pr(pt, k, d21, n) + pn(k0, bt, N))
-
-    print(pr(pt, k, d12, n) + pn(k0, bt, N), pr(pt, k, d12, n), pn(k0, bt, N))
 
     print(f"SINR y1,1: {y11}")
     print(f"SINR y2,2: {y22}")
@@ -35,8 +32,6 @@ def main():
 
     c11 = bt/N*log2(1+y11)
     c22 = bt/N*log2(1+y22)
-    print(bt/N, log2(1+y22))
-
 
     print(f"Channel Capacity C1,1: {(c11/10e6):.04f} Mbps")
     print(f"Channel Capacity C2,2: {(c22/10e6):.04f} Mbps")
@@ -51,7 +46,6 @@ def main():
 
     c11 = bt/N*log2(1+y11)
     c22 = bt/N*log2(1+y22)
-    print(bt/N, log2(1+y22))
 
     print(f"Channel Capacity C1,1: {(c11/10e6):.04f} Mbps")
     print(f"Channel Capacity C2,2: {(c22/10e6):.04f} Mbps")
