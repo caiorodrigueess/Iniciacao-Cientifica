@@ -3,7 +3,7 @@ def pr(pt, k, d, n):
 
 def main():
     pt=1
-    k=10e-4
+    k=1e-4
     n=4
     d11 = 50
     d12 = 110
