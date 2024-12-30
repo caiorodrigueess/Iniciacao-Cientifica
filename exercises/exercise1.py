@@ -5,14 +5,10 @@ def main():
     pt=1
     k=10e-4
     n=4
-    N=1
     d11 = 50
     d12 = 110
     d21 = 150
     d22 = 90
-    bt=100*10e6
-    k0=10e-17
-    soma=0
     
     UE1=pr(pt, k, d11, n)/pr(pt, k, d12, n)
     UE2=pr(pt, k, d22, n)/pr(pt, k, d21, n)
