@@ -10,13 +10,13 @@ def main():
     pt=1        # transmited power
     k=1e-4      
     n=4         # path gain
-    d11 = 50
-    d12 = 110
-    d21 = 150
-    d22 = 90
+    d11 = 90    # distance ap1-ue1
+    d12 = 110   # distance ap1-ue2
+    d21 = 110   # distance ap2-ue1
+    d22 = 90    # distance ap2-ue2
     bt=1e8      # avaiable bandwidth
-    k0=1e-20   # constant for the noise power
-    N = 1
+    k0=1e-20    # constant for the noise power
+    N = 1       # number of channels
 
     print("Item a): ")
 
@@ -50,7 +50,7 @@ def main():
 
     print('--------------------------------\n')
     print("Item d):")
-    print("O melhor cenário é aquele que mantem no mesmo canal.\n")
+    print("O melhor cenário é aquele que separa os canais.\n")
     
 
 if __name__=='__main__':
