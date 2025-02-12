@@ -7,6 +7,7 @@ class AP:
         self.y = y
         self.id = id
         self.channel = None
+        self.ues = []
 
     def __str__(self):
         return f'AP[{self.id}]({self.x}, {self.y})'
@@ -42,8 +43,6 @@ def dist_AP_UE(M: int, N: int) -> float:
             dist = x
             ue.ap = ap
             ap.channel = ue.channel
-    # Adicionar SINR
-    # Devo calcular o SINR ou a capacidade do canal?
     return dist
 
 def SINR(dist: float, N: int) -> float:
@@ -58,44 +57,57 @@ def SINR(dist: float, N: int) -> float:
     return pr/pn
 
 def channel_capacity(SINR: float, N: int) -> float:
-    bt=1e8      # avaiable bandwidth
+    bt=100      # avaiable bandwidth
     return (bt/N)*np.log2(1+SINR)
 
-def simular_experimento(M: int, N: int):
-    dist = dist_AP_UE(M, N)
-    sinr = SINR(dist, N)
-    return channel_capacity(sinr, N)
+def simular_experimento(M: int, N: int, sim: int) -> np.ndarray:
+    cap_canal = np.zeros(sim)
+    for i in range(sim):
+        cap_canal[i] = channel_capacity(SINR(dist_AP_UE(M, N), N), N)
+    return cap_canal
 
 if __name__ == '__main__':
     M = [1, 9, 36, 64]
     N = [1, 2, 3]
-    sim = 1000
+    sim = 10000
     '''
-    for m in M:
-        print(m)
-        aps = distribuir_AP(m)
-        for ap in aps:    
-            print(ap)
-    '''
-    cdf = np.zeros([len(M), len(N)])
+    cdf = np.zeros((len(M), len(N), sim))
+
     i=0
     for m in M:
         j=0
         for n in N:
-            for _ in range(sim):
-                x = simular_experimento(m, n)
-                cdf[i][j] += x
+            x = simular_experimento(m, n, sim)
+            cdf[i,j,:] = x
             j+=1
         i+=1
 
+    cdf_1 = np.sort(cdf[0,:,:])
+    cdf_9 = np.sort(cdf[1,:,:])
+    cdf_36 = np.sort(cdf[2,:,:])
+    cdf_64 = np.sort(cdf[3,:,:])
+    '''
+
+    print(np.sort(simular_experimento(1, 1, 1000)))
 
     '''
     Até o momento, tenho uma matriz de M linhas e N colunas
     Falta separar o vetor e plotar o gráfico
-    '''
     cdf.sort()
 
+    
+    print(cdf.shape)
 
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(1, sim + 1), cdf_1[0,:], label='CDF', color="b")
+    plt.xlabel('Número de Simulações')
+    plt.ylabel('Capacidade do Canal')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+
+    
     # Código inicial do gráfico -> precisa de alterações
     print(f'10th: {round(np.percentile(cdf, 10), 4)}')
     print(f'50th: {round(np.percentile(cdf, 50), 4)}')
@@ -113,3 +125,4 @@ if __name__ == '__main__':
     plt.legend()
     plt.grid(True)
     plt.show()
+    '''
