@@ -70,13 +70,21 @@ if __name__ == '__main__':
     M = [1, 9, 36, 64]
     N = [1, 2, 3]
     sim = 10000
-    
-    teste = np.sort(simular_experimento(64, 1, 1000))
+
+    # Testando o pior cenário: 1 AP e 3 canais
+    teste = np.sort(simular_experimento(1, 3, 1000))
     print(teste)
     print(f'10th: {np.percentile(teste, 10)}')
     print(f'50th: {np.percentile(teste, 50)}')
     print(f'90th: {np.percentile(teste, 90)}')
     
+    # Testando o melhor cenário: 64 APs e 1 canal
+    teste = np.sort(simular_experimento(64, 1, 1000))
+    print(teste)
+    print(f'10th: {np.percentile(teste, 10)}')
+    print(f'50th: {np.percentile(teste, 50)}')
+    print(f'90th: {np.percentile(teste, 90)}')
+
     '''
     cdf = np.zeros((len(M), len(N), sim))
 
