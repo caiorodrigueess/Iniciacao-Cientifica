@@ -58,7 +58,7 @@ def SINR(dist: float, N: int) -> float:
 
 def channel_capacity(SINR: float, N: int) -> float:
     bt=100      # avaiable bandwidth
-    return (bt/N)*np.log2(1+SINR)
+    return np.around((bt/N)*np.log2(1+SINR), 2)
 
 def simular_experimento(M: int, N: int, sim: int) -> np.ndarray:
     cap_canal = np.zeros(sim)
@@ -70,6 +70,13 @@ if __name__ == '__main__':
     M = [1, 9, 36, 64]
     N = [1, 2, 3]
     sim = 10000
+    
+    teste = np.sort(simular_experimento(64, 1, 1000))
+    print(teste)
+    print(f'10th: {np.percentile(teste, 10)}')
+    print(f'50th: {np.percentile(teste, 50)}')
+    print(f'90th: {np.percentile(teste, 90)}')
+    
     '''
     cdf = np.zeros((len(M), len(N), sim))
 
@@ -87,8 +94,6 @@ if __name__ == '__main__':
     cdf_36 = np.sort(cdf[2,:,:])
     cdf_64 = np.sort(cdf[3,:,:])
     '''
-
-    print(np.sort(simular_experimento(1, 1, 1000)))
 
     '''
     Até o momento, tenho uma matriz de M linhas e N colunas
