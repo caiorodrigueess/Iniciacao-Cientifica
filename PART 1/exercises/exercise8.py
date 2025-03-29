@@ -38,15 +38,35 @@ def distribuir_AP(M: int) -> np.ndarray:
     return APs
 
 def dist_AP_UE(M: int, ue: UE) -> float:
-    aps = distribuir_AP(M)
+    aps = distribuir_AP(M)  # Mantém a lista fixa de APs
     dist = 1e4
+    ap_mais_proximo = None
+
+    # Encontra o AP mais próximo inicialmente
     for ap in aps:
         x = np.linalg.norm(np.array([ue.x, ue.y]) - np.array([ap.x, ap.y]))
         if x < dist:
             dist = x
-            ue.ap = ap
-            ap.channel = ue.channel
-            ue.dist = dist
+            ap_mais_proximo = ap
+
+    # Se a distância for menor que 1m, reposiciona a UE e recalcula para todos os APs
+    while dist < 1:
+        ue.x = np.random.randint(0, 1001)
+        ue.y = np.random.randint(0, 1001)
+        dist = 1e4
+        ap_mais_proximo = None
+
+        for ap in aps:
+            x = np.linalg.norm(np.array([ue.x, ue.y]) - np.array([ap.x, ap.y]))
+            if x < dist:
+                dist = x
+                ap_mais_proximo = ap
+
+    # Atualiza as informações da UE e do AP correspondente
+    ue.dist = dist
+    ue.ap = ap_mais_proximo
+    ap_mais_proximo.channel = ue.channel
+
     return dist
 
 # Função para calcular o pr dos UEs interferentes
@@ -92,12 +112,12 @@ def simular_experimento(M: int, N: int, sim: int) -> tuple:
             sinr.append(s)
             cap_canal.append(cap)
 
-            if s<1e-7:
+            if s<1e-5:
                 ue_small = ue
                 break_flag = True
                 break
 
-            if s>1e20:
+            if s>1e8:
                 ue_large = ue
                 break_flag = True
                 break
@@ -121,7 +141,7 @@ def plot_APs_UEs(M: int, ues: list, ue_small: UE, ue_large: UE) -> None:
     green_patch = mpatches.Patch(color='green', label='Very large SINR')
         
     if ue_small is not None:
-        plt.scatter(ue_small.x, ue_small.y, marker='s', color='yellow')
+        plt.scatter(ue_small.x, ue_small.y, marker='s', color='yellow', label='UE (very large value)')
         plt.legend(handles=[yellow_patch])
     elif ue_large is not None:
         plt.scatter(ue_large.x, ue_large.y, marker='s', color='green', label='UE (very large value)')
@@ -141,36 +161,19 @@ def plot_APs_UEs(M: int, ues: list, ue_small: UE, ue_large: UE) -> None:
     plt.show()
     
 def plot_cdf(cdf: np.ndarray, tipo: str = 'capacity') -> None:
-    cdf.sort()
     plt.figure(figsize=(10, 6))
-    plt.plot(range(1, len(cdf) + 1), cdf, label='CDF')
-    '''plt.axhline(y=np.percentile(cdf, 1), color='r', linestyle='--', label='1th percentil')
-    plt.axhline(y=np.percentile(cdf, 99), color='g', linestyle='--', label='99th percentil')'''
 
     if tipo == 'sinr':
+        cdf = [np.log2(1 + a) for a in np.ravel(cdf)]
+        cdf.sort()
+        percentis = np.linspace(0, 1, len(cdf))
+        plt.plot(cdf, percentis, label='CDF')
         plt.title('Estimativa do SINR pelo número de simulações (Método Monte Carlo)')
-        plt.ylabel('SINR')
+        plt.xlabel('SINR')
     else:
         plt.title('Estimativa da Capacidade do Canal pelo número de simulações (Método Monte Carlo)')
-        plt.ylabel('Capacidade do Canal (Mbps)')
-    plt.xlabel('Número de Simulações')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-
-def plot_cdfs(cdf: list, tipo: str = 'capacity') -> None:
-    plt.figure(figsize=(10, 6))
-    for i in range(len(cdf)):
-        cdf[i].sort()
-        plt.plot(range(1, len(cdf[i]) + 1), cdf[i], label=f'{i+1} canal(is)')
-
-    if tipo == 'sinr':
-        plt.title('Estimativa do SINR pelo número de simulações (Método Monte Carlo)')
-        plt.ylabel('SINR')
-    else:
-        plt.title('Estimativa da Capacidade do Canal pelo número de simulações (Método Monte Carlo)')
-        plt.ylabel('Capacidade do Canal (Mbps)')
-    plt.xlabel('Número de Simulações')
+        plt.xlabel('Capacidade do Canal (Mbps)')
+    plt.ylabel('Percentil')
     plt.legend()
     plt.grid(True)
     plt.show()
