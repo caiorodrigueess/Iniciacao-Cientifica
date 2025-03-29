@@ -24,7 +24,7 @@ class UE:
 
 def distribuir_AP(M: int) -> np.ndarray:
     APs = []
-    dx = 1000/(2*np.sqrt(M))                    # passo
+    dx = 1000/(2*np.sqrt(M))
     a = np.arange(dx, 1001-dx, 2*dx)
     x, y = np.meshgrid(a, a)
     id = 1
@@ -33,10 +33,10 @@ def distribuir_AP(M: int) -> np.ndarray:
         id += 1
     return APs
 
-def dist_AP_UE(M: int, N: int) -> float:
+def dist_AP_UE(M: int, UE: UE) -> float:
     aps = distribuir_AP(M)
-    ue = UE(N)
     dist = 1e4
+    ue = UE
     for ap in aps:
         x = np.linalg.norm(np.array([ue.x, ue.y]) - np.array([ap.x, ap.y]))
         if x < dist:
@@ -60,30 +60,71 @@ def channel_capacity(SINR: float, N: int) -> float:
     bt=100      # avaiable bandwidth
     return np.around((bt/N)*np.log2(1+SINR), 2)
 
-def simular_experimento(M: int, N: int, sim: int) -> np.ndarray:
+def simular_experimento(M: int, N: int, sim: int) -> tuple:
+    sinr = np.zeros(sim)
     cap_canal = np.zeros(sim)
     for i in range(sim):
-        cap_canal[i] = channel_capacity(SINR(dist_AP_UE(M, N), N), N)
-    return cap_canal
+        ue = UE(N)
+        sinr[i] = SINR(dist_AP_UE(M, ue), N)
+        cap_canal[i] = channel_capacity(sinr[i], N)
+    return cap_canal, sinr, ue
+
+def plot_APs_UEs(M: int, ue: UE):
+    plt.figure(figsize=(10, 6))
+    aps = distribuir_AP(M)
+
+    for ap in aps:
+        plt.scatter(ap.x, ap.y, marker='^', color='blue', label='AP' if ap == aps[0] else "")
+    plt.scatter(ue.x, ue.y, marker='s', color='red', label='UE')
+    plt.plot([ue.ap.x, ue.x], [ue.ap.y, ue.y], linestyle='-', color='k', linewidth=1)
+
+    plt.xlim(0, 1000)
+    plt.ylim(0, 1000)
+    plt.xlabel('x')
+    plt.ylabel('y')
+    plt.title('APs e UEs')
+    dx = 1000/(np.sqrt(M))
+    plt.xticks(np.arange(0, 1001, dx))
+    plt.yticks(np.arange(0, 1001, dx))
+    plt.grid(True, linestyle='-', alpha=0.5)
+    plt.show()
+    
+    
+def plot_cdf(cdf: np.ndarray, tipo: str = 'capacity'):
+    cdf.sort()
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(1, len(cdf) + 1), cdf, label='CDF')
+    plt.axhline(y=np.percentile(cdf, 50), color='r', linestyle='--', label='Mediana')
+
+    if tipo == 'sinr':
+        plt.title('Estimativa do SINR pelo número de simulações (Método Monte Carlo)')
+        plt.ylabel('SINR')
+    else:
+        plt.title('Estimativa da Capacidade do Canal pelo número de simulações (Método Monte Carlo)')
+        plt.ylabel('Capacidade do Canal (Mbps)')
+    plt.xlabel('Número de Simulações')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 
 if __name__ == '__main__':
     M = [1, 9, 36, 64]
     N = [1, 2, 3]
     sim = 10000
 
-    # Testando o pior cenário: 1 AP e 3 canais
-    teste = np.sort(simular_experimento(1, 3, 1000))
-    print(teste)
-    print(f'10th: {np.percentile(teste, 10)}')
-    print(f'50th: {np.percentile(teste, 50)}')
-    print(f'90th: {np.percentile(teste, 90)}')
-    
-    # Testando o melhor cenário: 64 APs e 1 canal
-    teste = np.sort(simular_experimento(64, 1, 1000))
-    print(teste)
-    print(f'10th: {np.percentile(teste, 10)}')
-    print(f'50th: {np.percentile(teste, 50)}')
-    print(f'90th: {np.percentile(teste, 90)}')
+    for m in M:
+        for n in N:
+            teste, sinr, ue_retornada = simular_experimento(m, n, sim)
+            print(f'Cenário: {m} APs e {n} canal(is)')
+            teste.sort()
+            print(f'10th: {np.percentile(teste, 10)}')
+            print(f'50th: {np.percentile(teste, 50)}')
+            print(f'90th: {np.percentile(teste, 90)}')
+            '''plot_APs_UEs(64, ue_retornada)
+            plot_cdf(teste)
+            plot_cdf(sinr)'''
+            
+
 
     '''
     cdf = np.zeros((len(M), len(N), sim))

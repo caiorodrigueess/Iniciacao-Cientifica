@@ -8,9 +8,7 @@ centro_x, centro_y = 0.5, 0.5
 raio = 0.5
 
 # Simulação de Monte Carlo para estimar a área usando 500 pontos em 1000 simulações
-estimativas_area = []
 area_estimada = []
-contagem_dentro = 0
 
 for i in range(n_sim):               # Inicia um laço para rodar o número de simulações
 
@@ -23,19 +21,17 @@ for i in range(n_sim):               # Inicia um laço para rodar o número de s
 
     contagem_dentro = np.sum([1 for x in dentro_do_circulo if x==True])       # Incrementa o número de pontos dentro do circulo
     area_estimada.append(contagem_dentro / n_pontos)                           # Razão do número de pontos dentro
-    estimativas_area.append(np.mean(area_estimada))
 
-# estimativas_area.sort()
+area_estimada.sort()
 
-# Plotar o gráfico das estimativas de área
-plt.figure(figsize=(10, 6))
-plt.plot(range(1, n_sim + 1), estimativas_area, label='Estimativa da Área')
-plt.axhline(y=np.pi * raio**2, color='r', linestyle='--', label='Área real do círculo')
-
-# Configurar o gráfico
-plt.title('Estimativa da área do círculo pelo número de simulações (Método Monte Carlo)')
-plt.xlabel('Número de Simulações')
-plt.ylabel('Estimativa da Área')
-plt.legend()
-plt.grid(True)
+# Plotar o círculo e os pontos aleatórios (uma simulação)
+plt.figure(figsize=(6, 6))
+plt.xlim(0,1)
+plt.ylim(0,1)
+circle = plt.Circle((0.5, 0.5), 0.5, linewidth=.5, edgecolor='k', facecolor='none')
+plt.gca().add_patch(circle)
+for i in range(500):
+    plt.scatter(np.random.random(1), np.random.random(1), marker='+', color='black')
+plt.grid(False)
 plt.show()
+
