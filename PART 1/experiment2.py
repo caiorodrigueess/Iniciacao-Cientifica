@@ -126,7 +126,7 @@ def plot_APs_UEs(M: int, ues: list) -> None:
     plt.grid(True, linestyle='-', alpha=0.5)
     plt.show()
 
-def plot_cdfs(cdf: list, m: int, x: list, tipo: str = 'capacity') -> None:
+def plot_cdfs(cdf: list, n: int, m: list, tipo: str = 'capacity') -> None:
     plt.figure(figsize=(10, 6))
 
     if tipo == 'sinr':
@@ -135,29 +135,39 @@ def plot_cdfs(cdf: list, m: int, x: list, tipo: str = 'capacity') -> None:
             # Atualizando todos os valores para log2(1 + x)
             cdf[i] = [np.log2(1 + a) for a in np.ravel(cdf[i])]
 
-            cdf[i].sort()
-            
-            # Calcula os percentis de 0 a 1
-            percentis = np.linspace(0, 1, len(cdf[i]))
+            x = np.sort(cdf[i])
+            y = np.arange(1, len(cdf[i]) + 1) / len(cdf[i])
 
-            # Plota usando os percentis no eixo X
-            plt.plot(cdf[i], percentis, label=f'{x[i]} canais')
+            # Encontrar o 10th percentil
+            percentil_10 = np.percentile(cdf[i], 10)
+            # Filtrar os dados até o 10th percentil
+            mask = x <= percentil_10
+            x_filtrado = x[mask]
+            y_filtrado = y[mask]
 
-        plt.yticks([0, 0.1, 0.3, 0.5, 0.7, 0.9, 1])
-        plt.title(f'Estimativa do SINR pelo número de simulações ({m} APs)')
+            # Plotar a CDF até o 10th percentil
+            plt.plot(x_filtrado, y_filtrado, label=f'{m[i]} APs')
+
+        plt.title(f'Estimativa do SINR pelo número de simulações ({n} canais)')
         plt.xlabel('SINR')
 
     else:
         for i in range(len(cdf)):
             # Ordena os valores da CDF
-            cdf[i].sort()
-            percentis = np.linspace(0, 1, len(cdf[i]))
+            x = np.sort(cdf[i])
+            y = np.arange(1, len(cdf[i]) + 1) / len(cdf[i])
 
-            plt.plot(cdf[i], percentis, label=f'{x[i]} canais')
+            # Encontrar o 10th percentil
+            percentil_10 = np.percentile(cdf[i], 10)
+            # Filtrar os dados até o 10th percentil
+            mask = x <= percentil_10
+            x_filtrado = x[mask]
+            y_filtrado = y[mask]
 
-        plt.yticks([0, 0.1, 0.3, 0.5, 0.7, 0.9, 1])
-        plt.axvline(x=100, color='r', linewidth=0.7, linestyle='--', label = '100 Mbps')
-        plt.title(f'Estimativa da Capacidade do Canal pelo número de simulações ({m} APs)')
+            # Plotar a CDF até o 10th percentil
+            plt.plot(x_filtrado, y_filtrado, label=f'{m[i]} APs')
+
+        plt.title(f'Estimativa da Capacidade do Canal pelo número de simulações ({n} canais)')
         plt.xlabel('Capacidade do Canal (Mbps)')
     
     plt.ylabel('Percentil')
@@ -166,15 +176,15 @@ def plot_cdfs(cdf: list, m: int, x: list, tipo: str = 'capacity') -> None:
     plt.show()
 
 if __name__ == '__main__':
-    M = [1]
-    N = [1]
+    M = [1, 9, 36, 64]
+    N = [1, 2, 3]
     sim = 10000
     
-    for m in M:
+    for n in N:
         sinr = []
         cap_canal = []
         x = []
-        for n in N:
+        for m in M:
             a, b, c = simular_experimento(m, n, sim)
             sinr.append(a)
             cap_canal.append(b)
@@ -183,6 +193,6 @@ if __name__ == '__main__':
             print('10th:', np.percentile(b, 10))
             print('50th:', np.percentile(b, 50))
             print('90th:', np.percentile(b, 90))
-            x.append(n)
-        plot_cdfs(sinr, m, x, 'sinr')
-        plot_cdfs(cap_canal, m, x)
+            x.append(m)
+        plot_cdfs(sinr, n, x, 'sinr')
+        plot_cdfs(cap_canal, n, x)
