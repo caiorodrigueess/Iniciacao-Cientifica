@@ -90,75 +90,25 @@ def channel_capacity(SINR: float, N: int) -> float:
     bt=100      # avaiable bandwidth
     return np.around((bt/N)*np.log2(1+SINR), 4)
 
-def simular_experimento(M: int, sim: int) -> tuple:
+def simular_experimento(N: int, sim: int) -> tuple:
     sinr = []
     cap_canal = []
     ues = []
     av_sum_cap = []
     for _ in range(sim):
-        ues = [UE(2) for i in range(13)]
-        sum_cap = 0
+        ues = [UE(N) for i in range(13)]
         for ue in ues:
-            ue.dist = dist_AP_UE(M, ue)
-            s = SINR(ue, ues, 2)
-            cap = channel_capacity(s, 2)
+            ue.dist = dist_AP_UE(64, ue)
+            s = SINR(ue, ues, N)
+            cap = channel_capacity(s, N)
             sinr.append(s)
             cap_canal.append(cap)
-            sum_cap += cap
-        av_sum_cap.append(sum_cap)
 
-    return sinr, cap_canal, ues, np.mean(av_sum_cap)
-
-def plot_cdfs(cdf: list, m: int, x: list, tipo: str = 'capacity') -> None:
-    plt.figure(figsize=(10, 6))
-
-    if tipo == 'sinr':
-        # Ordena os valores da CDF
-        for i in range(len(cdf)):
-            # Atualizando todos os valores para log2(1 + x)
-            cdf[i] = [np.log2(1 + a) for a in np.ravel(cdf[i])]
-
-            cdf[i].sort()
-            
-            # Calcula os percentis de 0 a 1
-            percentis = np.linspace(0, 1, len(cdf[i]))
-
-            # Plota usando os percentis no eixo X
-            plt.plot(cdf[i], percentis, label=f'{x[i]} canais')
-
-        plt.yticks([0, 0.1, 0.3, 0.5, 0.7, 0.9, 1])
-        plt.title(f'Estimativa do SINR pelo número de simulações ({m} APs)')
-        plt.xlabel('SINR')
-
-    else:
-        for i in range(len(cdf)):
-            # Ordena os valores da CDF
-            cdf[i].sort()
-            percentis = np.linspace(0, 1, len(cdf[i]))
-
-            plt.plot(cdf[i], percentis, label=f'{x[i]} canais')
-
-        plt.yticks([0, 0.1, 0.3, 0.5, 0.7, 0.9, 1])
-        plt.axvline(x=100, color='r', linewidth=0.7, linestyle='--', label = '100 Mbps')
-        plt.title(f'Estimativa da Capacidade do Canal pelo número de simulações ({m} APs)')
-        plt.xlabel('Capacidade do Canal (Mbps)')
-    
-    plt.ylabel('Percentil')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
+    return sinr, cap_canal, ues
 
 if __name__ == '__main__':
-    M = [64, 49, 81]
     sim = 10000
+    N = 1
     
-    for m in M:
-        sinr = []
-        cap_canal = []
-        x = []
-        a, b, c, d = simular_experimento(m, sim)
-        sinr.append(a)
-        ase = d/1e8
-        cap_canal.append(b)
-        print(f'Cenário: {m} APs e 2 canais')
-        print(f'eficiência espectral de área: {ase} bps/Hz/km²')
+    sinr, cap_canal, ues = simular_experimento(N, sim)
+    print(f'Outage (5%): {np.percentile(cap_canal, 5):.2f} Mbps')
