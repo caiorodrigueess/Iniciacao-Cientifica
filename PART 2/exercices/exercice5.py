@@ -111,37 +111,35 @@ def simular_experimento(M: int, N: int, sim: int, shadowing: str = '') -> tuple:
 
     return sinr, cap_canal, np.mean(av_sum_cap)
 
-def plot_cdfs(cdf: list, m: int, tipo: str = 'capacity', shadowing: str = '') -> None:
+def plot_cdfs(cdf1: list, cdf2: list, m: int, tipo: str = 'capacity') -> None:
     plt.figure(figsize=(10, 6))
 
     if tipo == 'sinr':
-        cdf = [np.log2(1+a) for a in cdf]
-        cdf.sort()
-        percentis = np.linspace(0, 1, len(cdf))
+        cdf1 = [np.log2(1+a) for a in cdf1]
+        cdf2 = [np.log2(1+a) for a in cdf2]
+        cdf1.sort()
+        cdf2.sort()
+        percentis = np.linspace(0, 1, len(cdf1))
         
-        if shadowing == 'shadowing':
-            plt.plot(cdf, percentis, label=f'With shadowing')
-            plt.title(f'Estimativa do SINR ({m} APs, 2 canais)')
-            plt.xlabel('SINR')
+        plt.plot(cdf1, percentis, label=f'With shadowing')
+        plt.plot(cdf2, percentis, label=f'Without shadowing')
 
-        else:
-            plt.plot(cdf, percentis, label=f'Without shadowing')
-            plt.title(f'Estimativa do SINR ({m} APs, 2 canais)')
-            plt.xlabel('SINR')
+        plt.title(f'Estimativa do SINR ({m} APs, 2 canais)')
+        plt.xlabel('SINR')
 
 
     else:
-        cdf.sort()
-        percentis = np.linspace(0, 1, len(cdf))
+        cdf1.sort()
+        percentis = np.linspace(0, 1, len(cdf1))
 
-        plt.plot(cdf, percentis, label=f'Capacidade do Canal')
+        plt.plot(cdf1, percentis, label=f'Capacidade do Canal')
         plt.title(f'Estimativa da Capacidade do Canal ({m} APs)')
         plt.xlabel('Capacidade do Canal (Mbps)')
     
     plt.ylabel('Percentil')
     plt.legend()
     plt.grid(True)
-
+    plt.show()
 
 if __name__ == '__main__':
     M = 64
@@ -163,9 +161,7 @@ if __name__ == '__main__':
     print(f'c) Capacidade total do Canal: {sum_cap} Mbps')
 
 #    plot_cdfs(cap_canal, M)
-    plot_cdfs(sinr, M, 'sinr', 'shadowing')
-    plot_cdfs(sinr1, M, 'sinr')
-    plt.show()
+    plot_cdfs(sinr, sinr1, M, 'sinr')
 
 
 ''' #######
