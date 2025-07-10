@@ -34,8 +34,7 @@ def distribuir_AP(M: int) -> list:
         id += 1
     return APs
 
-def dist_AP_UE(M: int, ue: UE):
-    aps = distribuir_AP(M)  # Mantém a lista fixa de APs
+def dist_AP_UE(aps: list, ue: UE):
     dist = 1e4
     ap_mais_proximo = None
 
@@ -93,47 +92,65 @@ def channel_capacity(SINR: float, N: int) -> float:
     return np.around((bt/N)*np.log2(1+SINR), 4)
 
 def simular_experimento(M: int, N: int, sim: int, shadowing: str = '') -> tuple:
+    aps = distribuir_AP(M)  # Mantém a lista fixa de APs
     sinr = []
     cap_canal = []
     ues = []
     av_sum_cap = []
+
     for _ in range(sim):
         ues = [UE(2) for i in range(13)]
         sum_cap = 0
         for ue in ues:
-            ue.dist = dist_AP_UE(M, ue)
+            ue.dist = dist_AP_UE(aps, ue)
             s = SINR(ue, ues, N, shadowing)
             cap = channel_capacity(s, N)
+
             sinr.append(s)
             cap_canal.append(cap)
             sum_cap += cap
         av_sum_cap.append(sum_cap)
 
+
     return sinr, cap_canal, np.mean(av_sum_cap)
 
-def plot_cdfs(cdf1: list, cdf2: list, m: int, tipo: str = 'capacity') -> None:
+def plot_cdfs(cdf: list, tipo: str = 'capacity') -> None:
     plt.figure(figsize=(10, 6))
 
     if tipo == 'sinr':
-        cdf1 = [np.log2(1+a) for a in cdf1]
-        cdf2 = [np.log2(1+a) for a in cdf2]
-        cdf1.sort()
-        cdf2.sort()
-        percentis = np.linspace(0, 1, len(cdf1))
-        
-        plt.plot(cdf1, percentis, label=f'With shadowing')
-        plt.plot(cdf2, percentis, label=f'Without shadowing')
+        # Ordena os valores da CDF
+        for i in range(len(cdf)):
+            # Atualizando todos os valores para log2(1 + x)
+            cdf[i] = [np.log2(1 + a) for a in cdf[i]]
 
-        plt.title(f'Estimativa do SINR ({m} APs, 2 canais)')
+            cdf[i].sort()
+            
+            # Calcula os percentis de 0 a 1
+            percentis = np.linspace(0, 1, len(cdf[i]))
+
+        # Plota usando os percentis no eixo X
+        plt.plot(cdf[0], percentis, label=f'SINR com shadowing')
+        plt.axvline(x=np.percentile(cdf[0], 10), color='r', linewidth=0.7, linestyle='--', label = f'10th Percentil: {np.percentile(cdf[0], 10):.2f}')
+        plt.axvline(x=np.percentile(cdf[0], 50), color='r', linewidth=0.7, linestyle='--', label = f'50th Percentil: {np.percentile(cdf[0], 50):.2f}')
+
+        if len(cdf)>1: 
+            plt.plot(cdf[1], percentis, label=f'SINR sem shadowing')
+        plt.title(f'CDF do SINR por UE')
         plt.xlabel('SINR')
 
-
     else:
-        cdf1.sort()
-        percentis = np.linspace(0, 1, len(cdf1))
+        for i in range(len(cdf)):
+            # Ordena os valores da CDF
+            cdf[i].sort()
+            percentis = np.linspace(0, 1, len(cdf[i]))
 
-        plt.plot(cdf1, percentis, label=f'Capacidade do Canal')
-        plt.title(f'Estimativa da Capacidade do Canal ({m} APs)')
+        plt.plot(cdf[0], percentis, label=f'Cap. do Canal com shadowing')
+        plt.axvline(x=np.percentile(cdf[0], 10), color='r', linewidth=0.7, linestyle='--', label = f'10th Percentil: {np.percentile(cdf[0], 10):.2f} Mbps')
+        plt.axvline(x=np.percentile(cdf[0], 50), color='r', linewidth=0.7, linestyle='--', label = f'50th Percentil: {np.percentile(cdf[0], 50):.2f} Mbps')
+
+        if len(cdf)>1: 
+            plt.plot(cdf[1], percentis, label=f'Cap. do Canal sem shadowing')
+        plt.title(f'CDF da Capacidade do Canal por UE')
         plt.xlabel('Capacidade do Canal (Mbps)')
     
     plt.ylabel('Percentil')
@@ -141,30 +158,30 @@ def plot_cdfs(cdf1: list, cdf2: list, m: int, tipo: str = 'capacity') -> None:
     plt.grid(True)
     plt.show()
 
+
 if __name__ == '__main__':
     M = 64
     N = 2
     sim = 10000
 
-    sinr, cap_canal, sum_cap = simular_experimento(M, N, sim, 'shadowing')
-    sinr1, a, b = simular_experimento(M, N, sim)
-
-    print(f'Cenário: {M} APs e {N} canais)')
-    print(f'a) SINR de cada UE:')
-    print('10th:', np.percentile(sinr, 10))
-    print('50th:', np.percentile(sinr, 50))
-
-    print(f'b) Capacidade do Canal de cada UE:')
-    print('10th:', np.percentile(cap_canal, 10), 'Mbps')
-    print('50th:', np.percentile(cap_canal, 50), 'Mbps')
-
-    print(f'c) Capacidade total do Canal: {sum_cap} Mbps')
-
-#    plot_cdfs(cap_canal, M)
-    plot_cdfs(sinr, sinr1, M, 'sinr')
+    sinr1, cap_canal1, av_sum_cap1 = simular_experimento(M, N, sim, 'shadowing')
+    print(f'Average sum capacity with shadowing: {av_sum_cap1:.2f} Mbps')
+    '''sinr2, cap_canal2, av_sum_cap2 = simular_experimento(M, N, sim)
+    print(f'Average sum capacity without shadowing: {av_sum_cap2:.2f} Mbps')
+    '''
+    plot_cdfs([sinr1], 'sinr')
+    plot_cdfs([cap_canal1], 'capacity')
 
 
-''' #######
-- Adicionar os valores de SINR e Capacidade do Canal sem o efeito de shadowing para comparação.
-- Finalizar o exercicio 5
+
+
+'''
+SINR para todos os valores
+
+item c) valores com e sem sombreamento
+
+CDF do SINR e da capacidade do canal com e sem sombreamento
+
+
+
 '''
