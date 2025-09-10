@@ -78,54 +78,30 @@ def attach_AP_UE(ue: UE, aps: list) -> float:
         canal_menos_usado = np.argmin(np.bincount(canais))
         ue.channel = canal_menos_usado
 
+    # Cálculo da potência transmitida com controle de potência
+    pt_max=1    # max transmitted power
+    pt=1        # transmitted power
+    bt=1e8      # available bandwidth
+    k0=1e-20    # constant for the noise power
+    pn = k0*bt/N
+    pt_pc = pn/ue.gain
+    pt = min(pt_pc, pt_max)
+    ue.pt = pt
+
     return ue.dist
 
 def SINR(ue: UE, ues: list, N: int, ca: bool) -> float | list:
-    pt=1        # transmited power
     bt=1e8      # avaiable bandwidth
     k0=1e-20    # constant for the noise power
 
     pn = k0*bt/N
-
-    if ca and ue.ca:        # Se for o modelo com agregação de canal e a UE atual estiver usando CA, então calcula as duas SINRs
-        pt = 0.5        # Divide a potencia
-        pr = ue.gain * pt
-        sinr = []       # Lista para armazenar as SINRs de cada canal
-
-        for i in range(N):      # Para cada canal
-            # Determina as UEs que estão usando o canal i (0 ou 1)
-            interferentes = [u for u in ues if u != ue and i == u.channel]
-
-            if not interferentes:       # Se não houver interferentes no canal
-                sinr.append(pr / pn)    # Calcula apenas o SNR
-                
-            else:       # Se houver interferentes no canal
-                # Calcula a interferencia na UE atual
-                interfer_coords = np.array([[u.x, u.y] for u in interferentes])
-                ap_coord = np.array([ue.ap.x, ue.ap.y])
-                distances = np.linalg.norm(interfer_coords - ap_coord, axis=1)
-                distances = np.maximum(distances, 1)
-
-                x = np.random.lognormal(0, 2, len(interferentes))
-                pr_int = np.sum(x * 1e-4 / (distances ** 4))
-
-                sinr.append(pr / (pn + pr_int))
-        ue.sinr = sinr
-        return sinr
-
-    pr = ue.gain * pt
+    pr = ue.gain * ue.pt
 
     interferentes = [u for u in ues if u != ue and u.channel == ue.channel]
     if not interferentes:
         return pr / pn
 
-    interfer_coords = np.array([[u.x, u.y] for u in interferentes])
-    ap_coord = np.array([ue.ap.x, ue.ap.y])
-    distances = np.linalg.norm(interfer_coords - ap_coord, axis=1)
-    distances = np.maximum(distances, 1)
-
-    x = np.random.lognormal(0, 2, len(interferentes))
-    pr_int = np.sum(x * 1e-4 / (distances ** 4))
+    pr_int = np.sum([u.gain * u.pt for u in interferentes])
 
     sinr = pr / (pn + pr_int)
 
@@ -134,10 +110,6 @@ def SINR(ue: UE, ues: list, N: int, ca: bool) -> float | list:
 
 def channel_capacity(ue: UE, N: int, ca: bool) -> float:
     bt=100      # 100 MHz de largura de banda
-
-    if ca and ue.ca:
-        # Se for o modelo com agregação de canal, calcula a capacidade para cada canal e as soma
-        return sum([np.around((bt/N)*np.log2(1+s), 4) for s in ue.sinr])
     
     # Se for o modelo sem agregação de canal, calcula a capacidade normalmente
     return np.around((bt/N)*np.log2(1+ue.sinr), 4)

@@ -167,21 +167,8 @@ if __name__ == '__main__':
     sinr1, cap_canal1, av_sum_cap1 = simular_experimento(M, N, sim, 'shadowing')
     print(f'Average sum capacity with shadowing: {av_sum_cap1:.2f} Mbps')
     '''sinr2, cap_canal2, av_sum_cap2 = simular_experimento(M, N, sim)
-    print(f'Average sum capacity without shadowing: {av_sum_cap2:.2f} Mbps')
-    '''
+    print(f'Average sum capacity without shadowing: {av_sum_cap2:.2f} Mbps')'''
+    
     plot_cdfs([sinr1], 'sinr')
     plot_cdfs([cap_canal1], 'capacity')
 
-
-
-
-'''
-SINR para todos os valores
-
-item c) valores com e sem sombreamento
-
-CDF do SINR e da capacidade do canal com e sem sombreamento
-
-
-
-'''
