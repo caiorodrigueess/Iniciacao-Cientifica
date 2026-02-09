@@ -70,14 +70,15 @@ def gain_matrix(ues: list, aps: list) -> np.ndarray:
 
 def alocar_canais_ortogonal(access_points, ues, number_channels, allocation, G_slow=None, G_rayleigh=None):
     """
-    Suporta: 'random', 'papoa' (default) e 'imca'.
-    Para 'imca', G_slow e G_rayleigh são OBRIGATÓRIOS.
+    Aloca canais. Agora suporta 'imca' se G_slow e G_rayleigh forem passados.
     """
-    # 1. Limpa alocações anteriores
+    # Limpa alocações anteriores
     for ue in ues:
         ue.channel = None
+    
+    # Reinicia controle de uso dos APs
     for ap in access_points:
-        ap.canais_usados = set() # Reinicia conjunto de canais usados
+        ap.canais_usados = set()
 
     # --- MODO RANDOM ---
     if allocation == 'random':
@@ -85,86 +86,77 @@ def alocar_canais_ortogonal(access_points, ues, number_channels, allocation, G_s
             ue.channel = np.random.randint(1, number_channels + 1)
         return
 
-    # --- MODO IMCA ---
+    # --- MODO IMCA (Exercício 7/8) ---
     if allocation == 'imca':
+        # Lista embaralhada para justiça na alocação
         ues_shuffled = ues[:]
         random.shuffle(ues_shuffled)
         
-        # Parâmetros de ruído (consistentes com a função SINR)
+        # Lista auxiliar para calcular interferência acumulada
+        ues_ja_alocados = []
+        
         bt = 1e8
         k0 = 1e-20
-        pn = k0 * bt / number_channels # Ruído por canal
-
-        ues_alocados = [] # Lista local para ajudar no cálculo de interferência
+        pn = k0 * bt / number_channels
 
         for ue in ues_shuffled:
             ap = ue.ap
             
-            # A. Candidatos (Ortogonalidade Local)
+            # 1. Candidatos: Canais livres no AP (ou todos se estiver cheio)
             candidatos = [c for c in range(1, number_channels + 1) if c not in ap.canais_usados]
-            
-            # Se lotou o AP, libera reuso total
             if not candidatos:
                 candidatos = list(range(1, number_channels + 1))
             
-            melhor_sinr = -1.0
-            melhor_canal = candidatos[0] if candidatos else 1
+            melhor_sinr = -1
+            melhor_canal = candidatos[0]
             
-            # B. Medição e Estimativa
+            # 2. Medição: Testa cada candidato
             for c in candidatos:
-                c_idx = c - 1 # 0-based para matriz
+                c_idx = c - 1 # Índice para matriz (0 a N-1)
                 
-                # 1. Sinal Estimado (G_slow * G_rayleigh)
-                # ue.id deve corresponder ao índice na matriz. 
-                # Assumindo ue.id == índice i da lista original.
+                # Sinal Útil Estimado (Slow * Fast do canal c)
                 g_total = G_slow[ue.id, ap.id] * G_rayleigh[ue.id, ap.id, c_idx]
                 S = ue.power * g_total
                 
-                # 2. Interferência Medida (soma das potências dos UEs JÁ alocados neste canal c)
+                # Interferência Medida (Soma dos UEs já alocados neste canal c)
                 I = 0.0
-                for other_ue in ues_alocados:
-                    if other_ue.channel == c:
-                        # Ganho do interferente (other_ue) para o MEU AP (ap.id)
-                        g_int = G_slow[other_ue.id, ap.id] * G_rayleigh[other_ue.id, ap.id, c_idx]
-                        I += other_ue.power * g_int
+                for outro in ues_ja_alocados:
+                    if outro.channel == c:
+                        # Ganho do interferente -> meu AP
+                        g_int = G_slow[outro.id, ap.id] * G_rayleigh[outro.id, ap.id, c_idx]
+                        I += outro.power * g_int
                 
-                # 3. SINR Estimada
                 sinr_est = S / (I + pn)
                 
                 if sinr_est > melhor_sinr:
                     melhor_sinr = sinr_est
                     melhor_canal = c
             
-            # C. Atribuição Final
+            # 3. Atribuição
             ue.channel = melhor_canal
             ap.canais_usados.add(melhor_canal)
-            ues_alocados.append(ue)
+            ues_ja_alocados.append(ue)
         return
 
-    # --- MODO PAPOA (Default) ---
-    # PAPOA Clássico: Ortogonalidade por AP apenas
-    channels_global_count = {i: 0 for i in range(1, number_channels + 1)}
-    
+    # --- MODO PAPOA (Default - Mantido igual) ---
+    # (Seu código original do PAPOA aqui...)
+    channels = {i: 0 for i in range(1, number_channels + 1)}
     for ap in access_points:
-        available_channels = list(channels_global_count.keys())
+        available_channels = list(channels.keys())
         random.shuffle(available_channels)
-        
-        for ue in ap.ues:
+        for ue0 in ap.ues:
             if not available_channels:
-                break # Acabaram os canais neste AP (UEs excedentes ficam sem canal ou tratamos depois)
-            
+                break
             channel = available_channels.pop()
-            ue.channel = channel
-            ap.canais_usados.add(channel)
-            channels_global_count[channel] += 1
+            ue0.channel = channel
+            ap.canais_usados.add(channel) # Importante atualizar isso também
+            channels[channel] += 1
             
-    # Cleanup (Preenchimento para UEs que sobraram, se houver)
     for ue in ues:
         if ue.channel is None:
-            # Pega o canal menos usado no sistema (load balancing simples)
-            least_used = min(channels_global_count, key=channels_global_count.get)
-            ue.channel = least_used
-            channels_global_count[least_used] += 1
+            least = min(channels, key=channels.get)
+            ue.channel = least
+            channels[least] += 1
 
 def attach_AP_UE(ues: list, aps: list, G: np.ndarray) -> float:
     for i, ue in enumerate(ues):
@@ -218,58 +210,70 @@ def channel_capacity(sinr_list: list, N: int) -> list:
     # Shannon: B * log2(1 + SINR)
     return (B_per_channel * np.log2(1 + sinr_arr)) / 1e6 # Mbps
 
-def simular_experimento(M: int, N: int, sim: int, allocation: str = '') -> tuple:
+def simular_comparativo(M: int, N: int, sim: int):
+    """
+    Executa uma simulação comparativa justa (Shared Snapshot).
+    Gera um cenário e testa os 3 algoritmos nele antes de passar para o próximo.
+    """
     aps = distribuir_AP(M)
-    sinr = []
-    cap_canal = []
-    av_sum_cap = []
+    
+    # Dicionário para armazenar resultados de todos os métodos
+    resultados = {
+        'Random': {'sinr': [], 'cap': [], 'sum_cap': []},
+        'PAPOA':  {'sinr': [], 'cap': [], 'sum_cap': []},
+        'IMCA':   {'sinr': [], 'cap': [], 'sum_cap': []}
+    }
+
+    metodos = ['Random', 'PAPOA', 'IMCA']
+    # Mapeamento para as strings que a função de alocação entende
+    mapa_alloc = {'Random': 'random', 'PAPOA': '', 'IMCA': 'imca'}
 
     for _ in range(sim):
+        # 1. GERAÇÃO DO CENÁRIO (ÚNICO PARA ESTA ITERAÇÃO)
         UE.id_counter = 0 
-        ues = [UE(N) for i in range(13)] # Mantém K=13 conforme seu código
+        ues = [UE(N) for i in range(13)] # Ajuste a quantidade de UEs aqui se necessário
         
-        # calculando Ganho Lento (Distância + Shadowing)
+        # Ganho Lento e Attachment (Comum a todos)
         G_slow = gain_matrix(ues, aps)
-        
-        # attachment (Baseado apenas no Ganho Lento)
         attach_AP_UE(ues, aps, G_slow)
         
-        # Fast Fading (Rayleigh) para TODOS os canais
-        # Shape: [Num_UEs, Num_APs, Num_Canais]
+        # Ganho Rápido (Rayleigh) - Gerado UMA vez para este snapshot
         sigma_r = 1/np.sqrt(2)
+        h_vals = np.random.normal(0, sigma_r, (len(ues), len(aps), N))**2 + \
+                 np.random.normal(0, sigma_r, (len(ues), len(aps), N))**2
+        G_rayleigh = h_vals
 
-        # Gerando componentes normal (0, sigma)
-        h_real = np.random.normal(0, sigma_r, (len(ues), len(aps), N))
-        h_imag = np.random.normal(0, sigma_r, (len(ues), len(aps), N))
+        # 2. RODADA DE TESTES (Competição)
+        for metodo in metodos:
+            # Importante: A função de alocação deve limpar o canal anterior
+            # Passamos o MESMO G_slow e G_rayleigh para todos
+            alocar_canais_ortogonal(aps, ues, N, mapa_alloc[metodo], G_slow, G_rayleigh)
+            
+            # 3. CÁLCULO DE MÉTRICAS (Baseado no canal escolhido)
+            # Recria a matriz efetiva baseada na escolha do algoritmo atual
+            G_effective = np.zeros_like(G_slow)
+            for i, ue in enumerate(ues):
+                c_idx = ue.channel - 1
+                if c_idx < 0: c_idx = 0
+                G_effective[i, :] = G_slow[i, :] * G_rayleigh[i, :, c_idx]
+            
+            # Calcula SINR e Capacidade
+            s_linear = SINR(ues, N, G_effective)
+            c_shannon = channel_capacity(s_linear, N)
+            
+            # Armazena os dados brutos (ou estatísticas)
+            # Aqui estamos guardando TUDO para processar depois, ou você pode
+            # guardar apenas médias/percentis para economizar memória.
+            resultados[metodo]['sinr'].extend(s_linear)
+            resultados[metodo]['cap'].extend(c_shannon)
+            resultados[metodo]['sum_cap'].append(np.sum(c_shannon))
 
-        G_rayleigh = h_real**2 + h_imag**2 # |h|^2
-        
-        # alocação de canais (Passando as matrizes necessárias para o IMCA)
-        alocar_canais_ortogonal(aps, ues, N, allocation, G_slow, G_rayleigh)
-
-        # construção da Matriz de Ganho Efetiva para cálculo da SINR Real
-        # a função SINR() usa uma matriz G[k,m]. Precisamos que essa matriz contenha o ganho real do canal que o UE *efetivamente usou*.
-        G_effective = np.zeros_like(G_slow)
-        for i, ue in enumerate(ues):
-            # O ganho efetivo do UE 'i' para qualquer AP 'j' é o ganho no canal que ele escolheu.
-            c_idx = ue.channel - 1 # 0-based
-            G_effective[i, :] = G_slow[i, :] * G_rayleigh[i, :, c_idx]
-
-        # cálculo dos KPIs usando o ganho efetivo
-        s = SINR(ues, N, G_effective)
-        cap = channel_capacity(s, N)
-        sum_cap = np.sum(cap)
-
-        # salvando as amostras para plotar as CDFs depois
-        sinr.extend(s)
-        cap_canal.extend(cap)
-        av_sum_cap.append(sum_cap)
-
-        # limpando a lista de UEs em cada AP para o próximo experimento
+        # Limpeza dos APs para a próxima iteração do loop principal
         for ap in aps:
-            ap.ues = []
+            ap.ues = [] 
+            ap.canais_usados = set()
 
-    return sinr, cap_canal, np.mean(av_sum_cap)
+    return resultados
 
 def plot_cdfs(cdf_sinr: list, cdf_capacity: list) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
