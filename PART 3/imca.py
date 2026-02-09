@@ -68,62 +68,103 @@ def gain_matrix(ues: list, aps: list) -> np.ndarray:
             G[i, j] = np.random.lognormal(0, 2) * 1e-4 / (d**4)
     return G
 
-def alocar_canais_ortogonal(access_points, ues, number_channels, allocation):
+def alocar_canais_ortogonal(access_points, ues, number_channels, allocation, G_slow=None, G_rayleigh=None):
     """
-    Aloca canais aos UEs de forma ortogonal dentro de cada célula (AP).
-
-    Esta função é uma adaptação do método 'channel_allocation'
-
-    Argumentos:
-    access_points (list): A lista de objetos AccessPoint.
-    user_equipaments (list): A lista de objetos UserEquipament.
-    number_channels (int): O número total de canais ortogonais (N).
-
-    Modifica:
-    O atributo 'channel' de cada objeto na lista user_equipaments é
-    atualizado "in-place" (no próprio objeto).
+    Suporta: 'random', 'papoa' (default) e 'imca'.
+    Para 'imca', G_slow e G_rayleigh são OBRIGATÓRIOS.
     """
-
-    # 1. Zera os canais de todos os UEs
-    # (Necessário para a lógica de "preenchimento" funcionar)
+    # 1. Limpa alocações anteriores
     for ue in ues:
         ue.channel = None
+    for ap in access_points:
+        ap.canais_usados = set() # Reinicia conjunto de canais usados
 
+    # --- MODO RANDOM ---
     if allocation == 'random':
         for ue in ues:
             ue.channel = np.random.randint(1, number_channels + 1)
-        return None
+        return
 
-    # 2. Inicializa o contador global de uso de canal
-    channels = {i: 0 for i in range(1, number_channels + 1)}
+    # --- MODO IMCA ---
+    if allocation == 'imca':
+        ues_shuffled = ues[:]
+        random.shuffle(ues_shuffled)
+        
+        # Parâmetros de ruído (consistentes com a função SINR)
+        bt = 1e8
+        k0 = 1e-20
+        pn = k0 * bt / number_channels # Ruído por canal
 
-    # 3. Itera por cada AP para alocação intra-célula
+        ues_alocados = [] # Lista local para ajudar no cálculo de interferência
+
+        for ue in ues_shuffled:
+            ap = ue.ap
+            
+            # A. Candidatos (Ortogonalidade Local)
+            candidatos = [c for c in range(1, number_channels + 1) if c not in ap.canais_usados]
+            
+            # Se lotou o AP, libera reuso total
+            if not candidatos:
+                candidatos = list(range(1, number_channels + 1))
+            
+            melhor_sinr = -1.0
+            melhor_canal = candidatos[0] if candidatos else 1
+            
+            # B. Medição e Estimativa
+            for c in candidatos:
+                c_idx = c - 1 # 0-based para matriz
+                
+                # 1. Sinal Estimado (G_slow * G_rayleigh)
+                # ue.id deve corresponder ao índice na matriz. 
+                # Assumindo ue.id == índice i da lista original.
+                g_total = G_slow[ue.id, ap.id] * G_rayleigh[ue.id, ap.id, c_idx]
+                S = ue.power * g_total
+                
+                # 2. Interferência Medida (soma das potências dos UEs JÁ alocados neste canal c)
+                I = 0.0
+                for other_ue in ues_alocados:
+                    if other_ue.channel == c:
+                        # Ganho do interferente (other_ue) para o MEU AP (ap.id)
+                        g_int = G_slow[other_ue.id, ap.id] * G_rayleigh[other_ue.id, ap.id, c_idx]
+                        I += other_ue.power * g_int
+                
+                # 3. SINR Estimada
+                sinr_est = S / (I + pn)
+                
+                if sinr_est > melhor_sinr:
+                    melhor_sinr = sinr_est
+                    melhor_canal = c
+            
+            # C. Atribuição Final
+            ue.channel = melhor_canal
+            ap.canais_usados.add(melhor_canal)
+            ues_alocados.append(ue)
+        return
+
+    # --- MODO PAPOA (Default) ---
+    # PAPOA Clássico: Ortogonalidade por AP apenas
+    channels_global_count = {i: 0 for i in range(1, number_channels + 1)}
+    
     for ap in access_points:
-        available_channels = list(channels.keys())
+        available_channels = list(channels_global_count.keys())
         random.shuffle(available_channels)
-
-        # 4. Itera pelos UEs (por índice) conectados a este AP
-        for ue0 in ap.ues:
+        
+        for ue in ap.ues:
             if not available_channels:
-                # Para se o AP tiver mais UEs do que canais
-                break
-
-            # 5. Atribui um canal disponível e o remove da lista do AP
+                break # Acabaram os canais neste AP (UEs excedentes ficam sem canal ou tratamos depois)
+            
             channel = available_channels.pop()
-
-            # 6. Atribui o canal ao UE e incrementa o contador global
-            index_ue = ue0.id
-            ues[index_ue].channel = channel
-            channels[channel] += 1
-
-    # 7. Etapa de Preenchimento (Cleanup)
+            ue.channel = channel
+            ap.canais_usados.add(channel)
+            channels_global_count[channel] += 1
+            
+    # Cleanup (Preenchimento para UEs que sobraram, se houver)
     for ue in ues:
         if ue.channel is None:
-            # Se o UE não recebeu um canal (passo 4),
-            # atribui o canal menos usado globalmente.
-            least_used_channel = min(channels, key=channels.get)
-            ue.channel = least_used_channel
-            channels[least_used_channel] += 1
+            # Pega o canal menos usado no sistema (load balancing simples)
+            least_used = min(channels_global_count, key=channels_global_count.get)
+            ue.channel = least_used
+            channels_global_count[least_used] += 1
 
 def attach_AP_UE(ues: list, aps: list, G: np.ndarray) -> float:
     for i, ue in enumerate(ues):
@@ -135,62 +176,47 @@ def attach_AP_UE(ues: list, aps: list, G: np.ndarray) -> float:
         aps[best_index].ues.append(ue)
 
 
-def SINR(ues: list, N: int, G: np.ndarray) -> float:
-    pt=1        # transmited power
-    bt=1e8      # avaiable bandwidth
-    k0=1e-20    # constant for the noise power
-
+def SINR(ues: list, N: int, G_effective: np.ndarray) -> list:
+    bt=1e8
+    k0=1e-20
     pn = k0*bt/N
-
-    num_ues = len(ues)
-
-    # Coleta os vetores de estado do sistema (extraídos dos objetos)
-    # Vetor de Potência (P)
-    P = np.array([ue.power for ue in ues])
-
-    # Vetor de Associação de AP (A)
-    # A[k] = índice do AP que serve o UE k
-    A = np.array([ue.ap.id for ue in ues])
-
-    # Vetor de Alocação de Canal (C)
-    # C[k] = canal (ex: 1, 2, 3...) usado pelo UE k
-    C = np.array([ue.channel for ue in ues])
-
+    
     sinr_list = []
-
-    # Itera por cada UE 'k' para calcular seu SINR
-    for k in range(num_ues):
-
-        # 1. Encontrar o AP de serviço para este UE 'k'
-        m = A[k] # m é o índice do AP de serviço
-
-        # 2. Calcular a Potência do Sinal (S)
-        S = G[k, m] * P[k]
-
-        # 3. Calcular a Potência de Interferência (I)
-        I = 0.0
-        for i in range(num_ues):
-            if i != k and C[i] == C[k]:
-                # I += G[i, m] * P[i]
-                I += G[i, m] * P[i]
-
-        # 5. Calcular SINR = S / (I + N)
-        sinr = S / (I + pn)
-        sinr_list.append(sinr)
-
+    # Cria mapas auxiliares para agilizar
+    ue_power = np.array([u.power for u in ues])
+    ue_channel = np.array([u.channel for u in ues])
+    
+    for k, ue_k in enumerate(ues):
+        ap_servidor_id = ue_k.ap.id
+        meu_canal = ue_k.channel
+        
+        # Sinal Útil
+        S = G_effective[k, ap_servidor_id] * ue_k.power
+        
+        # Interferência: Soma de (G_effective[i, meu_ap] * P[i]) onde canal[i] == meu_canal
+        # G_effective JÁ deve conter o ganho do canal que o usuário 'i' está usando.
+        
+        # Mascara: todos os UEs no mesmo canal, exceto eu
+        mask = (ue_channel == meu_canal)
+        mask[k] = False # Remove eu mesmo
+        
+        if np.any(mask):
+            # Ganhos dos interferentes para o MEU AP
+            gains_interferentes = G_effective[mask, ap_servidor_id]
+            powers_interferentes = ue_power[mask]
+            I = np.sum(gains_interferentes * powers_interferentes)
+        else:
+            I = 0.0
+            
+        sinr_list.append(S / (I + pn))
+        
     return sinr_list
 
-def channel_capacity(sinr_valores: list, N: int) -> list:
-    # largura de banda por canal (B_canal)
+def channel_capacity(sinr_list: list, N: int) -> list:
     B_per_channel = 1e8 / N
-
-    # converte a(s) entrada(s) SINR para um array numpy
-    sinr_array = np.asarray(sinr_valores)
-
-    # C = B * log2(1 + SINR)
-    capacity_mbps = B_per_channel * np.log2(1 + sinr_array) / 1e6  # Converte para Mbps
-
-    return capacity_mbps
+    sinr_arr = np.array(sinr_list)
+    # Shannon: B * log2(1 + SINR)
+    return (B_per_channel * np.log2(1 + sinr_arr)) / 1e6 # Mbps
 
 def simular_experimento(M: int, N: int, sim: int, allocation: str = '') -> tuple:
     aps = distribuir_AP(M)
