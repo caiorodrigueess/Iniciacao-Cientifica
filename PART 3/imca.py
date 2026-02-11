@@ -224,25 +224,18 @@ def channel_capacity(sinr_valores: list, N: int) -> list:
     return capacity_mbps
 
 def simular_experimento(ues: list, aps: list, G:np.ndarray, N: int, sim: int, allocation: str = '') -> tuple:
-    sinr = []
-    cap_canal = []
-    av_sum_cap = []
+    # ----------------------
+    # realiza uma simulação
+    # ----------------------
 
-    for _ in range(sim):
-        UE.id_counter = 0       # reseta a contagem em cada simulação
-        sum_cap = 0
-        attach_AP_UE(ues, aps, G)
-        alocar_canais(aps, ues, G, N, allocation)
+    attach_AP_UE(ues, aps, G)
+    alocar_canais(aps, ues, G, N, allocation)
 
-        s = SINR(ues, N, G)
-        cap = channel_capacity(s, N)
-        sum_cap = np.sum(cap)
+    sinr = SINR(ues, N, G)
+    cap = channel_capacity(sinr, N)
+    sum_cap = np.sum(cap)
 
-        sinr.extend(s)
-        cap_canal.extend(cap)
-        av_sum_cap.append(sum_cap)
+    for ap in aps:
+        ap.ues = []  # Limpa a lista de UEs para o próximo experimento
 
-        for ap in aps:
-            ap.ues = []  # Limpa a lista de UEs para o próximo experimento
-
-    return sinr, cap_canal, np.mean(av_sum_cap)
+    return sinr, cap, sum_cap
