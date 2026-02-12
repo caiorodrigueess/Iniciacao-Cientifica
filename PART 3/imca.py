@@ -94,7 +94,7 @@ def alocar_canais(aps: list, ues: list, G: np.ndarray, N: int, allocation: str):
 
         # itera por cada AP 
         for ap in aps:
-            canais_disponiveis = list(canais.keys())      # lista de canais disponíveis para este AP
+            canais_disponiveis = list(canais.keys())        # lista de canais disponíveis para este AP
             random.shuffle(canais_disponiveis)              # embaralha para evitar vieses
 
             # itera pelos UEs (por índice) conectados a este AP
@@ -151,7 +151,6 @@ def alocar_canais(aps: list, ues: list, G: np.ndarray, N: int, allocation: str):
             ue.channel = melhor_canal
         return None
 
-
 def attach_AP_UE(ues: list, aps: list, G: np.ndarray) -> float:
     for i, ue in enumerate(ues):
         # Encontra o AP com o maior ganho para este UE
@@ -163,63 +162,42 @@ def attach_AP_UE(ues: list, aps: list, G: np.ndarray) -> float:
     return None
 
 def SINR(ues: list, N: int, G: np.ndarray) -> float:
-    pt=1        # transmited power
     bt=1e8      # avaiable bandwidth
     k0=1e-20    # constant for the noise power
 
+    # noise power
     pn = k0*bt/N
 
-    num_ues = len(ues)
+    # multipath fading para cada canal
+    h2 = (np.random.rayleigh(scale=1/np.sqrt(2), size=N))**2
 
-    # Coleta os vetores de estado do sistema (extraídos dos objetos)
-    # Vetor de Potência (P)
+    # vetor de potência
     P = np.array([ue.power for ue in ues])
 
-    # Vetor de Associação de AP (A)
-    # A[k] = índice do AP que serve o UE k
-    A = np.array([ue.ap.id for ue in ues])
+    # variável para armazenar os valores de SINR
+    sinr = []
 
-    # Vetor de Alocação de Canal (C)
-    # C[k] = canal (ex: 1, 2, 3...) usado pelo UE k
-    C = np.array([ue.channel for ue in ues])
+    for i, ue in enumerate(ues):
+        # para cada UE, calcula o sinal útil e a interferência total dos outros UEs no mesmo canal
+        s = ue.gain * P[i] * h2[ue.channel - 1]  # sinal útil
 
-    sinr_list = []
+        # interferência total de outros UEs no mesmo canal
+        interference = 0.0
 
-    # Itera por cada UE 'k' para calcular seu SINR
-    for k in range(num_ues):
+        # itera sobre todos os outros UEs do sistema
+        for j, outro_ue in enumerate(ues):
+            # se outro UE estiver transmitindo no mesmo canal e for diferente do UE atual, acumula a interferência
+            if j != i and outro_ue.channel == ue.channel:
+                interference += G[j, ue.ap.id] * P[j] * h2[ue.channel - 1]
 
-        # 1. Encontrar o AP de serviço para este UE 'k'
-        m = A[k] # m é o índice do AP de serviço
+        sinr.append(s / (interference + pn))
 
-        # 2. Calcular a Potência do Sinal (S)
-        # (Sinal do UE k no AP m)
-        # S = G[k, m] * P[k]
-        S = G[k, m] * P[k]
+    return sinr
 
-        # 3. Calcular a Potência de Interferência (I)
-        # (Soma da potência de todos os *outros* UEs 'i'
-        #  que transmitem no mesmo canal 'C[k]'
-        #  e são recebidos no *nosso* AP 'm')
-        I = 0.0
-        for i in range(num_ues):
-            # A interferência ocorre se:
-            # 1. Não é o próprio UE (i != k)
-            # 2. O UE 'i' está no mesmo canal que o UE 'k' (C[i] == C[k])
-            # (No seu código, a interferência inter-célula é considerada)
-            if i != k and C[i] == C[k]:
-                # I += G[i, m] * P[i]
-                I += G[i, m] * P[i]
-
-        # calcular SINR = S / (I + N)
-        sinr = S / (I + pn)
-        sinr_list.append(sinr)
-
-    return sinr_list
-
-def channel_capacity(sinr_valores: list, N: int) -> list:
+def channel_capacity(sinr: list, N: int) -> list:
     B_per_channel = 1e8 / N
-    sinr_array = np.asarray(sinr_valores)
-    capacity_mbps = B_per_channel * np.log2(1 + sinr_array) / 1e6  # Converte para Mbps
+    sinr_array = np.asarray(sinr)
+    capacity_mbps = B_per_channel * np.log2(1 + sinr_array) / 1e6
 
     return capacity_mbps
 
@@ -228,9 +206,11 @@ def simular_experimento(ues: list, aps: list, G:np.ndarray, N: int, sim: int, al
     # realiza uma simulação
     # ----------------------
 
+    # associa os UEs aos APs e aloca os canais
     attach_AP_UE(ues, aps, G)
     alocar_canais(aps, ues, G, N, allocation)
 
+    # calcula o SINR, a capacidade de canal e a capacidade total do sistema
     sinr = SINR(ues, N, G)
     cap = channel_capacity(sinr, N)
     sum_cap = np.sum(cap)
@@ -239,3 +219,95 @@ def simular_experimento(ues: list, aps: list, G:np.ndarray, N: int, sim: int, al
         ap.ues = []  # Limpa a lista de UEs para o próximo experimento
 
     return sinr, cap, sum_cap
+
+'''
+if __name__ == '__main__':
+    import copy
+    # Configurações do Experimento
+    M = 64                  # M = 64 APs
+    canais = range(2, 11)   # N varia de 2 a 10
+    num_simulacoes = 1000
+    np.random.seed(42)
+
+    # Estruturas para armazenar os KPIs finais
+    resultados = {
+        'random': {'sum_cap': [], 'sinr': [], 'cap': []},
+        'papoa':  {'sum_cap': [], 'sinr': [], 'cap': []},
+        'imca':  {'sum_cap': [], 'sinr': [], 'cap': []}
+    }
+
+    # --- Loop Principal ---
+    for N in canais:
+        # variaveis auxiliares para armazenar a média da capacidade de soma
+        sum_cap = {'random': [], 'papoa': [], 'imca':[]}
+        sinr = {'random': [], 'papoa': [], 'imca':[]}
+        cap = {'random': [], 'papoa': [], 'imca':[]}
+        
+        for _ in range(num_simulacoes): 
+            UE.id_counter = 0
+            ues = [UE(N) for i in range(13)]
+            aps = distribuir_AP(M)
+            G = gain_matrix(ues, aps)
+
+            for modo in ['random', 'papoa', 'imca']:
+
+                # Criamos cópias dos APs e UEs para que um algoritmo não afete o outro
+                aps_copy = copy.deepcopy(aps)
+                ues_copy = copy.deepcopy(ues)
+                    
+                sinr_rd, cap_rd, sum_cap_rd = simular_experimento(ues_copy, aps_copy, G, N, num_simulacoes, modo)
+                sinr_db = 10 * np.log10(sinr_rd)
+                
+                # Armazenamos os resultados brutos para calcular os percentis depois
+                sinr[modo].extend(sinr_db)
+                cap[modo].extend(cap_rd)
+                sum_cap[modo].append(sum_cap_rd)
+
+        # calculando a média da capacidade total do sistema em cada algoritmo
+        for modo in ['random', 'papoa', 'imca']:
+            resultados[modo]['sinr'].append(sinr[modo])
+            resultados[modo]['cap'].append(cap[modo])
+            resultados[modo]['sum_cap'].append(np.mean(sum_cap[modo]))
+
+    plt.figure(figsize=(20, 5))
+
+    # Mapeamento para garantir que usamos as chaves minúsculas do dicionário 'resultados'
+    mapa = {'random': 'Random', 'papoa': 'PAPOA', 'imca': 'IMCA'}
+
+    # Gráfico 1: Capacidade de Soma
+    plt.subplot(1, 3, 1)
+    for chave in ['random', 'papoa', 'imca']:
+        plt.plot(canais, resultados[chave]['sum_cap'], 'o--', label=mapa[chave])
+    plt.xlabel('Número de Canais (N)')
+    plt.ylabel('Mbps')
+    plt.title('Capacidade de Soma')
+    plt.legend()
+    plt.grid(True)
+
+    # Gráfico 2: SINR (Percentil 10)
+    plt.subplot(1, 3, 2)
+    for chave in ['random', 'papoa', 'imca']:
+        # Calcula o percentil 10 para cada valor de N na lista
+        p10_sinr = [np.percentile(res, 10) for res in resultados[chave]['sinr']]
+        plt.plot(canais, p10_sinr, 'o--', label=mapa[chave])
+    plt.xlabel('Número de Canais (N)')
+    plt.ylabel('dB')
+    plt.title('Percentil 10 da SINR')
+    plt.legend()
+    plt.grid(True)
+
+    # Gráfico 3: Capacidade de Canal (Percentil 10)
+    plt.subplot(1, 3, 3)
+    for chave in ['random', 'papoa', 'imca']:
+        # Calcula o percentil 10 para cada valor de N na lista
+        p10_cap = [np.percentile(res, 10) for res in resultados[chave]['cap']]
+        plt.plot(canais, p10_cap, 'o--', label=mapa[chave])
+    plt.xlabel('Número de Canais (N)')
+    plt.ylabel('Mbps')
+    plt.title('Percentil 10 da Capacidade de Canal')
+    plt.legend()
+    plt.grid(True)
+
+    plt.tight_layout()
+    plt.show()
+'''
