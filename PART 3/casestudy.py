@@ -48,6 +48,8 @@ def simulate_noise_limited_scenario():
         id += 1
 
     aps = [aps_init[3], aps_init[2], aps_init[1], aps_init[0]]  # muda a ordem dos APs
+    for ap in aps:
+        ap.id = aps.index(ap)  # atualiza os IDs dos APs de acordo com a nova ordem
 
     # path gain matrix
     G = np.zeros((len(ues), len(aps)))
@@ -77,13 +79,13 @@ def simulate_noise_limited_scenario():
     bt = 100e6          # largura de banda (Hz)
     pn = k0*bt          # potência de ruído (W)
     y_tar = 1           # SINR alvo (linear)
-
+    t_max = 30          # número máximo de iterações
 
     # vetor de potencias
-    p = np.ones((len(ues), 20))         # inicializa as potências com 1W para cada UE
-    y = np.zeros((len(ues), 20))        # vetor para armazenar os SINRs ao longo das iterações
+    p = np.ones((len(ues), t_max))         # inicializa as potências com 1W para cada UE
+    y = np.zeros((len(ues), t_max))        # vetor para armazenar os SINRs ao longo das iterações
 
-    for t in range(20):
+    for t in range(t_max):
         for i, ue in enumerate(ues):
             # Calcula a interferência total para este UE
             interference = sum([p[k][t] * G[k][ue.ap.id] * R[k][ue.ap.id] for k in range(len(ues)) if k != i])
@@ -95,7 +97,7 @@ def simulate_noise_limited_scenario():
             # Atualiza a potência usando o algoritmo de controle de potência
             pt = min(max(p_min, p[i][t] * y_tar / sinr), p_max)
 
-            if t < 19:  # Evita atualizar a potência na última iteração
+            if t < t_max - 1:  # Evita atualizar a potência na última iteração
                 p[i][t+1] = pt
 
     return ues, aps, p, y
@@ -145,8 +147,10 @@ def simulate_interference_limited_scenario():
     for xi, yi in zip(x.ravel(), y.ravel()):
         aps_init.append(AP(xi, yi, id))
         id += 1
-
+    
     aps = [aps_init[3], aps_init[2], aps_init[1], aps_init[0]]  # muda a ordem dos APs
+    for ap in aps:
+        ap.id = aps.index(ap)  # atualiza os IDs dos APs de acordo com a nova ordem
 
     # path gain matrix
     G = np.zeros((len(ues), len(aps)))
@@ -176,7 +180,7 @@ def simulate_interference_limited_scenario():
     bt = 100e6          # largura de banda (Hz)
     pn = k0*bt          # potência de ruído (W)
     y_tar = 1           # SINR alvo (linear)
-    t_max = 20          # número máximo de iterações
+    t_max = 30          # número máximo de iterações
 
 
     # vetor de potencias
