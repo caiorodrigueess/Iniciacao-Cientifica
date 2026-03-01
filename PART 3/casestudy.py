@@ -37,8 +37,6 @@ def simulate_noise_limited_scenario():
         ues[i].x = u[i].real
         ues[i].y = u[i].imag
 
-    print([(ue.x, ue.y) for ue in ues])
-
     # distribuindo os aps
     aps_init = []
     dx = 1000/(2*np.sqrt(4))            # L = 1000m
@@ -61,8 +59,6 @@ def simulate_noise_limited_scenario():
         for j in range(len(aps)):
             d = np.linalg.norm(ue_coord - ap_coords[j])
             G[i, j] = X[i][j] * 1e-4 / (d**4)
-
-    print(G)
 
     # associando os UEs aos APs
     for i, ue in enumerate(ues):
@@ -141,14 +137,16 @@ def simulate_interference_limited_scenario():
         ues[i].y = u[i].imag
 
     # distribuindo os aps
-    aps = []
+    aps_init = []
     dx = 100/(2*np.sqrt(4))            # L = 100 m
     a = np.arange(dx, 101-dx, 2*dx)
     x, y = np.meshgrid(a, a)
     id = 0
     for xi, yi in zip(x.ravel(), y.ravel()):
-        aps.append(AP(xi, yi, id))
+        aps_init.append(AP(xi, yi, id))
         id += 1
+
+    aps = [aps_init[1], aps_init[0], aps_init[3], aps_init[2]]  # muda a ordem dos APs
 
     # path gain matrix
     G = np.zeros((len(ues), len(aps)))
@@ -201,5 +199,3 @@ def simulate_interference_limited_scenario():
                 p[i][t+1] = pt
 
     return ues, aps, p, y
-
-simulate_noise_limited_scenario()
