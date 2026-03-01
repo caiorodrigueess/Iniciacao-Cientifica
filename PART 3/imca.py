@@ -3,9 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from collections import Counter
 
-GAIN_MATRIX_CACHE = None
-
-
 class AP:
     def __init__(self, x: float, y: float, id: int):
         self.x = x
