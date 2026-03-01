@@ -47,7 +47,7 @@ def simulate_noise_limited_scenario():
         aps_init.append(AP(xi, yi, id))
         id += 1
 
-    aps = [aps_init[1], aps_init[0], aps_init[3], aps_init[2]]  # muda a ordem dos APs
+    aps = [aps_init[3], aps_init[2], aps_init[1], aps_init[0]]  # muda a ordem dos APs
 
     # path gain matrix
     G = np.zeros((len(ues), len(aps)))
@@ -146,7 +146,7 @@ def simulate_interference_limited_scenario():
         aps_init.append(AP(xi, yi, id))
         id += 1
 
-    aps = [aps_init[1], aps_init[0], aps_init[3], aps_init[2]]  # muda a ordem dos APs
+    aps = [aps_init[3], aps_init[2], aps_init[1], aps_init[0]]  # muda a ordem dos APs
 
     # path gain matrix
     G = np.zeros((len(ues), len(aps)))
