@@ -26,6 +26,7 @@ class UE:
         self.dist = 0
         self.gain = 0
         self.power = 1  # Transmit power
+        self.interference = []
 
     def __str__(self):
         return f'UE({self.x}, {self.y})'

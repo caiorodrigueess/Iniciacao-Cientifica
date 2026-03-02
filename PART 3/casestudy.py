@@ -1,33 +1,41 @@
 import numpy as np
 from imca import UE, AP
 
+# definindo os parâmetros de potência e ruído
+p_max = 1.0         # potência máxima (W)
+p_min = 0.001       # potência mínima (W)
+k0 = 1e-20          # constante de ruído (W/Hz)
+bt = 100e6          # largura de banda (Hz)
+pn = k0*bt          # potência de ruído (W)
+y_tar = 1           # SINR alvo (linear)
+t_max = 10          # número máximo de iterações
+
+# Matriz X
+X = np.array([
+    [5.3434e-2, 2.8731e-1, 1.9691e-2, 7.3013e-1],
+    [3.2318,    1.5770,    2.6449e-1, 5.6379   ],
+    [6.1470e-3, 1.1424,    2.6826e-1, 4.5709   ],
+    [1.3485e-1, 4.6690e-1, 7.8250e-1, 1.6742   ]
+])
+
+# Matriz R
+R = np.array([
+    [1.248699, 3.248041, 0.772754, 0.708962],
+    [0.498887, 0.104890, 0.647280, 0.940906],
+    [0.382966, 0.682700, 1.891256, 0.327100],
+    [0.065737, 0.649500, 1.981107, 1.259538]
+])
+
+
 def simulate_noise_limited_scenario():
-    # Matriz X
-    X = np.array([
-        [5.3434e-2, 2.8731e-1, 1.9691e-2, 7.3013e-1],
-        [3.2318,    1.5770,    2.6449e-1, 5.6379   ],
-        [6.1470e-3, 1.1424,    2.6826e-1, 4.5709   ],
-        [1.3485e-1, 4.6690e-1, 7.8250e-1, 1.6742   ]
-    ])
-
-    # Matriz R
-    R = np.array([
-        [1.248699, 3.248041, 0.772754, 0.708962],
-        [0.498887, 0.104890, 0.647280, 0.940906],
-        [0.382966, 0.682700, 1.891256, 0.327100],
-        [0.065737, 0.649500, 1.981107, 1.259538]
-    ])
-
-    # =======================
-    # NOISE-LIMITED SCENARIO
-    # =======================
-
     # Vetor u
     u = np.array([
         225.83+203.33j,
         566.79+321.88j,
         765.51+146.88j,
         265.95+702.39j])
+
+    print([f'Distancia: {np.linalg.norm(np.array([u[i].real, u[i].imag]) - np.array([250, 250]))} m' for i in range(4)])
 
     # lista com os UEs
     ues = [UE(1) for _ in range(4)]
@@ -47,7 +55,7 @@ def simulate_noise_limited_scenario():
         aps_init.append(AP(xi, yi, id))
         id += 1
 
-    aps = [aps_init[3], aps_init[2], aps_init[1], aps_init[0]]  # muda a ordem dos APs
+    aps = [aps_init[0], aps_init[2], aps_init[1], aps_init[3]]  # muda a ordem dos APs
     for ap in aps:
         ap.id = aps.index(ap)  # atualiza os IDs dos APs de acordo com a nova ordem
 
@@ -72,15 +80,6 @@ def simulate_noise_limited_scenario():
         aps[best_index].ues.append(ue)      # adiciona o UE à lista de UEs do AP
 
 
-    # definindo os parâmetros de potência e ruído
-    p_max = 1.0         # potência máxima (W)
-    p_min = 0.001       # potência mínima (W)
-    k0 = 1e-20          # constante de ruído (W/Hz)
-    bt = 100e6          # largura de banda (Hz)
-    pn = k0*bt          # potência de ruído (W)
-    y_tar = 1           # SINR alvo (linear)
-    t_max = 30          # número máximo de iterações
-
     # vetor de potencias
     p = np.ones((len(ues), t_max))         # inicializa as potências com 1W para cada UE
     y = np.zeros((len(ues), t_max))        # vetor para armazenar os SINRs ao longo das iterações
@@ -89,7 +88,8 @@ def simulate_noise_limited_scenario():
         for i, ue in enumerate(ues):
             # Calcula a interferência total para este UE
             interference = sum([p[k][t] * G[k][ue.ap.id] * R[k][ue.ap.id] for k in range(len(ues)) if k != i])
-            
+            ue.interference.append(interference)
+
             # Calcula o SINR para este UE
             sinr = (p[i][t] * ue.gain * R[i][ue.ap.id]) / (interference + pn)
             y[i][t] = sinr
@@ -103,26 +103,6 @@ def simulate_noise_limited_scenario():
     return ues, aps, p, y
 
 def simulate_interference_limited_scenario():
-    # Matriz X
-    X = np.array([
-        [5.3434e-2, 2.8731e-1, 1.9691e-2, 7.3013e-1],
-        [3.2318,    1.5770,    2.6449e-1, 5.6379   ],
-        [6.1470e-3, 1.1424,    2.6826e-1, 4.5709   ],
-        [1.3485e-1, 4.6690e-1, 7.8250e-1, 1.6742   ]
-    ])
-
-    # Matriz R
-    R = np.array([
-        [1.248699, 3.248041, 0.772754, 0.708962],
-        [0.498887, 0.104890, 0.647280, 0.940906],
-        [0.382966, 0.682700, 1.891256, 0.327100],
-        [0.065737, 0.649500, 1.981107, 1.259538]
-    ])
-
-    # =======================
-    # INTERFERENCE-LIMITED SCENARIO
-    # =======================
-
     # Vetor u
     u = np.array([
         22.583+20.333j,
@@ -148,7 +128,7 @@ def simulate_interference_limited_scenario():
         aps_init.append(AP(xi, yi, id))
         id += 1
     
-    aps = [aps_init[3], aps_init[2], aps_init[1], aps_init[0]]  # muda a ordem dos APs
+    aps = [aps_init[0], aps_init[2], aps_init[1], aps_init[3]]  # muda a ordem dos APs
     for ap in aps:
         ap.id = aps.index(ap)  # atualiza os IDs dos APs de acordo com a nova ordem
 
@@ -172,17 +152,6 @@ def simulate_interference_limited_scenario():
         ue.dist = np.linalg.norm(np.array([ue.x, ue.y]) - np.array([ue.ap.x, ue.ap.y]))     # armazena a distancia
         aps[best_index].ues.append(ue)      # adiciona o UE à lista de UEs do AP
 
-
-    # definindo os parâmetros de potência e ruído
-    p_max = 1.0         # potência máxima (W)
-    p_min = 0.001       # potência mínima (W)
-    k0 = 1e-20          # constante de ruído (W/Hz)
-    bt = 100e6          # largura de banda (Hz)
-    pn = k0*bt          # potência de ruído (W)
-    y_tar = 1           # SINR alvo (linear)
-    t_max = 30          # número máximo de iterações
-
-
     # vetor de potencias
     p = np.ones((len(ues), t_max))         # inicializa as potências com 1W para cada UE
     y = np.zeros((len(ues), t_max))        # vetor para armazenar os SINRs ao longo das iterações
@@ -191,6 +160,7 @@ def simulate_interference_limited_scenario():
         for i, ue in enumerate(ues):
             # Calcula a interferência total para este UE
             interference = sum([p[k][t] * G[k][ue.ap.id] * R[k][ue.ap.id] for k in range(len(ues)) if k != i])
+            ue.interference.append(interference)
             
             # Calcula o SINR para este UE
             sinr = (p[i][t] * ue.gain * R[i][ue.ap.id]) / (interference + pn)
@@ -203,3 +173,19 @@ def simulate_interference_limited_scenario():
                 p[i][t+1] = pt
 
     return ues, aps, p, y
+
+'''ues, aps, p, y = simulate_noise_limited_scenario()
+
+for i in range(4):
+    print(f'UE {i+1}')
+    print(f'Potência: {p[i][0]} W')
+    print(f'Ganho: {ues[i].gain:.4e}')
+    print(f'Interferência: {ues[i].interference[0]:.4e} W')
+    print(f'Ruído: {pn:.4e} W')
+    print(f'SINR: {y[i][0]:.2f}')
+    print(f'Capacidade do canal: {100*np.log2(1+y[i][0]):.2f} Mbps\n')
+
+sum_cap = sum([100*np.log2(1+y[i][0]) for i in range(4)])
+p_total = sum([p[i][0] for i in range(len(p))])
+print(f'Sum-capacity: {sum_cap:.4f} Mbps')
+print(f'Energy Efficiency: {sum_cap/p_total:.4f} Mbits/Joule')'''
