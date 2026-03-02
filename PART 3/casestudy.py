@@ -35,8 +35,6 @@ def simulate_noise_limited_scenario():
         765.51+146.88j,
         265.95+702.39j])
 
-    print([f'Distancia: {np.linalg.norm(np.array([u[i].real, u[i].imag]) - np.array([250, 250]))} m' for i in range(4)])
-
     # lista com os UEs
     ues = [UE(1) for _ in range(4)]
 
