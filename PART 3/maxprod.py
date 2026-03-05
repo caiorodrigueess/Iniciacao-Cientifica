@@ -8,7 +8,6 @@ p_init = 0.1        # potência inicial (W)
 k0 = 1e-20          # constante de ruído (W/Hz)
 bt = 100e6          # largura de banda (Hz)
 pn = k0*bt          # potência de ruído (W)
-t_max = 20          # número máximo de iterações
 
 # Matriz X
 X = np.array([
@@ -27,7 +26,7 @@ R = np.array([
 ])
 
 
-def simulate(cenario: str = 'noise'):
+def simulate(cenario: str = 'noise', t_max: int = 20):
     if cenario == 'noise':
         L = 1000
 
@@ -40,7 +39,6 @@ def simulate(cenario: str = 'noise'):
 
     if cenario == 'interference':
         L = 100
-        t_max = 500
 
         # Vetor u
         u = np.array([
