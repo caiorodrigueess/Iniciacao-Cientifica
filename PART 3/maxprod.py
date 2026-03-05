@@ -108,7 +108,7 @@ def simulate(cenario: str = 'noise'):
             ue.interference.append(I_k)
 
             # Calcula o SINR para este UE
-            sinr = (p[k][t] * ue.gain * R[k][ue.ap.id]) / (I_k + pn)
+            sinr = (p[k][t] * ue.gain * R[k][ue.ap.id]) / I_k
             y[k][t] = sinr
 
             # somatório de 1/I_i para i != k
