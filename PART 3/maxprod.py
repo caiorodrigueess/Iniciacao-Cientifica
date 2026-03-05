@@ -61,7 +61,7 @@ def simulate(cenario: str = 'noise'):
     # distribuindo os aps
     aps_init = []
     dx = L/(2*np.sqrt(4))
-    a = np.arange(dx, 1001-dx, 2*dx)
+    a = np.arange(dx, L-dx, 2*dx)
     x, y = np.meshgrid(a, a)
     id = 0
     for xi, yi in zip(x.ravel(), y.ravel()):
@@ -100,7 +100,7 @@ def simulate(cenario: str = 'noise'):
 
     for t in range(t_max):
         for i in range(len(ues)):
-            interferences[i] = sum([p[k][t] * G[k][ues[i].ap.id] for k in range(len(ues)) if k != i]) + pn
+            interferences[i] = sum([p[k][t] * G[k][ues[i].ap.id] * R[k][ue.ap.id] for k in range(len(ues)) if k != i]) + pn
 
         for k, ue in enumerate(ues):
             # Calcula a interferência total para este UE
@@ -111,8 +111,8 @@ def simulate(cenario: str = 'noise'):
             sinr = (p[k][t] * ue.gain * R[k][ue.ap.id]) / (I_k + pn)
             y[k][t] = sinr
 
-            # somatório de 1/I_j para j != k
-            sum_I_j = sum([1/interferences[j] for j in range(len(ues)) if j != k])
+            # somatório de 1/I_i para i != k
+            sum_I_j = sum([G[k][i]/interferences[i] for i in range(len(ues)) if i != k])
 
             # Atualiza a potência usando o algoritmo de controle de potência
             pt = min(max(p_min, p[k][t] + 0.1*((G[k][ue.ap.id]/(sinr*I_k)) - sum_I_j)), p_max)
