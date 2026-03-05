@@ -4,10 +4,11 @@ from imca import UE, AP
 # definindo os parâmetros de potência e ruído
 p_max = 1.0         # potência máxima (W)
 p_min = 0.001       # potência mínima (W)
+p_init = 0.1        # potência inicial (W)
 k0 = 1e-20          # constante de ruído (W/Hz)
 bt = 100e6          # largura de banda (Hz)
 pn = k0*bt          # potência de ruído (W)
-t_max = 10          # número máximo de iterações
+t_max = 20          # número máximo de iterações
 
 # Matriz X
 X = np.array([
@@ -28,27 +29,24 @@ R = np.array([
 
 def simulate(cenario: str = 'noise'):
     if cenario == 'noise':
+        L = 1000
+
         # Vetor u
         u = np.array([
             225.83+203.33j,
             566.79+321.88j,
             765.51+146.88j,
             265.95+702.39j])
-        
-        L = 1000          # Lado do quadrado (m)
-        
-    elif cenario == 'interference':
+
+    if cenario == 'interference':
+        L = 100
+
         # Vetor u
         u = np.array([
             22.583+20.333j,
             56.679+32.188j,
             76.551+14.688j,
             26.595+70.239j])
-        
-        L = 100           # Lado do quadrado (m)
-
-    else:
-        raise ValueError("Cenário inválido. Use 'noise' ou 'interference'.")
 
     # lista com os UEs
     ues = [UE(1) for _ in range(4)]
@@ -60,8 +58,8 @@ def simulate(cenario: str = 'noise'):
 
     # distribuindo os aps
     aps_init = []
-    dx = L/(2*np.sqrt(4))
-    a = np.arange(dx, L-dx, 2*dx)
+    dx = L/(2*np.sqrt(4))            # L = 1000m
+    a = np.arange(dx, L+1-dx, 2*dx)
     x, y = np.meshgrid(a, a)
     id = 0
     for xi, yi in zip(x.ravel(), y.ravel()):
@@ -94,17 +92,18 @@ def simulate(cenario: str = 'noise'):
 
 
     # vetor de potencias
-    p = np.ones((len(ues), t_max))         # inicializa as potências com 1W para cada UE
-    y = np.zeros((len(ues), t_max))        # vetor para armazenar os SINRs ao longo das iterações
-    interferences = np.zeros(len(ues))
+    p = np.ones((len(ues), t_max))          # inicializa as potências com 1W para cada UE
+    #p[:, 0] = p_init * np.ones(len(ues))    # define a potência inicial para cada UE
+    y = np.zeros((len(ues), t_max))         # vetor para armazenar os SINRs ao longo das iterações
+    interferences = np.zeros((len(ues), t_max))
 
     for t in range(t_max):
         for i in range(len(ues)):
-            interferences[i] = sum([p[k][t] * G[k][ues[i].ap.id] * R[k][ue.ap.id] for k in range(len(ues)) if k != i]) + pn
+            interferences[i][t] = sum([p[k][t] * G[k][ues[i].ap.id] * R[k][ues[i].ap.id] for k in range(len(ues)) if k != i]) + pn
 
         for k, ue in enumerate(ues):
             # Calcula a interferência total para este UE
-            I_k = interferences[k]
+            I_k = interferences[k][t]
             ue.interference.append(I_k)
 
             # Calcula o SINR para este UE
@@ -112,10 +111,13 @@ def simulate(cenario: str = 'noise'):
             y[k][t] = sinr
 
             # somatório de 1/I_i para i != k
-            sum_I_j = sum([G[k][i]/interferences[i] for i in range(len(ues)) if i != k])
+            sum_I_j = 0
+            for j in range(len(ues)):
+                if j != k:
+                    sum_I_j += G[j][ues[k].ap.id]*R[j][ues[k].ap.id]/interferences[j][t]
 
             # Atualiza a potência usando o algoritmo de controle de potência
-            pt = min(max(p_min, p[k][t] + 0.1*((G[k][ue.ap.id]/(sinr*I_k)) - sum_I_j)), p_max)
+            pt = min(max(p_min, p[k][t] + 0.1*((G[k][ue.ap.id]*R[k][ue.ap.id]/(sinr*I_k)) - sum_I_j)), p_max)
 
             if t < t_max - 1:  # Evita atualizar a potência na última iteração
                 p[k][t+1] = pt
@@ -127,9 +129,9 @@ def simulate(cenario: str = 'noise'):
 for i in range(4):
     print(f'UE {i+1}')
     print(f'Potência: {p[i][-1]} W')
-    print(f'Ganho: {ues[i].gain:.4e}')
-    print(f'Interferência: {ues[i].interference[0]:.4e} W')
-    print(f'Ruído: {pn:.4e} W')
+    #print(f'Ganho: {ues[i].gain:.4e}')
+    #print(f'Interferência: {ues[i].interference[0]:.4e} W')
+    #print(f'Ruído: {pn:.4e} W')
     print(f'SINR: {y[i][-1]:.2f}')
     print(f'Capacidade do canal: {100*np.log2(1+y[i][-1]):.2f} Mbps\n')
 
