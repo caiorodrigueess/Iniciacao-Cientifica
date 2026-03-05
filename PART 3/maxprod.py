@@ -40,6 +40,7 @@ def simulate(cenario: str = 'noise'):
 
     if cenario == 'interference':
         L = 100
+        t_max = 500
 
         # Vetor u
         u = np.array([
@@ -124,18 +125,16 @@ def simulate(cenario: str = 'noise'):
 
     return ues, aps, p, y
 
-'''ues, aps, p, y = simulate('noise')
+'''if __name__ == "__main__":
+    ues, aps, p, y = simulate('interference')
 
-for i in range(4):
-    print(f'UE {i+1}')
-    print(f'Potência: {p[i][-1]} W')
-    #print(f'Ganho: {ues[i].gain:.4e}')
-    #print(f'Interferência: {ues[i].interference[0]:.4e} W')
-    #print(f'Ruído: {pn:.4e} W')
-    print(f'SINR: {y[i][-1]:.2f}')
-    print(f'Capacidade do canal: {100*np.log2(1+y[i][-1]):.2f} Mbps\n')
+    for i in range(4):
+        print(f'UE {i+1}')
+        print(f'Potência: {p[i][-1]:.3f} W')
+        print(f'SINR: {y[i][-1]:.2f}')
+        print(f'Capacidade do canal: {100*np.log2(1+y[i][-1]):.2f} Mbps\n')
 
-sum_cap = sum([100*np.log2(1+y[i][-1]) for i in range(4)])
-p_total = sum([p[i][-1] for i in range(len(p))])
-print(f'Sum-capacity: {sum_cap:.4f} Mbps')
-print(f'Energy Efficiency: {sum_cap/p_total:.4f} Mbits/Joule')'''
+    sum_cap = sum([100*np.log2(1+y[i][-1]) for i in range(4)])
+    p_total = sum([p[i][-1] for i in range(len(p))])
+    print(f'Sum-capacity: {sum_cap:.4f} Mbps')
+    print(f'Energy Efficiency: {sum_cap/p_total:.4f} bits/Joule')'''
