@@ -4,7 +4,7 @@ from imca import UE, AP
 # definindo os parâmetros de potência e ruído
 p_max = 1.0         # potência máxima (W)
 p_min = 0.001       # potência mínima (W)
-p_init = 0.1        # potência inicial (W)
+p_init = 0.5        # potência inicial (W)
 k0 = 1e-20          # constante de ruído (W/Hz)
 bt = 100e6          # largura de banda (Hz)
 pn = k0*bt          # potência de ruído (W)
@@ -92,7 +92,7 @@ def simulate(cenario: str = 'noise', t_max: int = 20):
 
     # vetor de potencias
     p = np.ones((len(ues), t_max))          # inicializa as potências com 1W para cada UE
-    #p[:, 0] = p_init * np.ones(len(ues))    # define a potência inicial para cada UE
+    p[:, 0] = p_init * np.ones(len(ues))    # define a potência inicial para cada UE
     y = np.zeros((len(ues), t_max))         # vetor para armazenar os SINRs ao longo das iterações
     interferences = np.zeros((len(ues), t_max))
 
@@ -116,7 +116,7 @@ def simulate(cenario: str = 'noise', t_max: int = 20):
                     sum_I_j += G[j][ues[k].ap.id]*R[j][ues[k].ap.id]/interferences[j][t]
 
             # Atualiza a potência usando o algoritmo de controle de potência
-            pt = min(max(p_min, p[k][t] + 0.1*((G[k][ue.ap.id]*R[k][ue.ap.id]/(sinr*I_k)) - sum_I_j)), p_max)
+            pt = min(max(p_min, p[k][t] + 1e-2*((G[k][ue.ap.id]*R[k][ue.ap.id]/(sinr*I_k)) - sum_I_j)), p_max)
 
             if t < t_max - 1:  # Evita atualizar a potência na última iteração
                 p[k][t+1] = pt
@@ -124,7 +124,7 @@ def simulate(cenario: str = 'noise', t_max: int = 20):
     return ues, aps, p, y
 
 '''if __name__ == "__main__":
-    ues, aps, p, y = simulate('interference')
+    ues, aps, p, y = simulate('noise', t_max=300)
 
     for i in range(4):
         print(f'UE {i+1}')
