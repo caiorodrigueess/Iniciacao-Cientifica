@@ -26,7 +26,7 @@ R = np.array([
 ])
 
 
-def simulate(cenario: str = 'noise', t_max: int = 20):
+def simulate(cenario: str = 'noise', t_max: int = 20, passo: float = 0.1):
     if cenario == 'noise':
         L = 1000
 
@@ -57,7 +57,7 @@ def simulate(cenario: str = 'noise', t_max: int = 20):
 
     # distribuindo os aps
     aps_init = []
-    dx = L/(2*np.sqrt(4))            # L = 1000m
+    dx = L/(2*np.sqrt(4))
     a = np.arange(dx, L+1-dx, 2*dx)
     x, y = np.meshgrid(a, a)
     id = 0
@@ -116,7 +116,7 @@ def simulate(cenario: str = 'noise', t_max: int = 20):
                     sum_I_j += G[j][ues[k].ap.id]*R[j][ues[k].ap.id]/interferences[j][t]
 
             # Atualiza a potência usando o algoritmo de controle de potência
-            pt = min(max(p_min, p[k][t] + 1e-2*((G[k][ue.ap.id]*R[k][ue.ap.id]/(sinr*I_k)) - sum_I_j)), p_max)
+            pt = min(max(p_min, p[k][t] + passo*((G[k][ue.ap.id]*R[k][ue.ap.id]/(sinr*I_k)) - sum_I_j)), p_max)
 
             if t < t_max - 1:  # Evita atualizar a potência na última iteração
                 p[k][t+1] = pt
