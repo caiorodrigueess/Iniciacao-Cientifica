@@ -113,7 +113,7 @@ def simulate(cenario: str = 'noise', t_max: int = 20, passo: float = 0.1):
             sum_I_j = 0
             for j in range(len(ues)):
                 if j != k:
-                    sum_I_j += G[j][ues[k].ap.id]*R[j][ues[k].ap.id]/interferences[j][t]
+                    sum_I_j += G[k][ues[j].ap.id]*R[k][ues[j].ap.id]/interferences[j][t]
 
             # Atualiza a potência usando o algoritmo de controle de potência
             pt = min(max(p_min, p[k][t] + passo*((G[k][ue.ap.id]*R[k][ue.ap.id]/(sinr*I_k)) - sum_I_j)), p_max)
@@ -123,8 +123,8 @@ def simulate(cenario: str = 'noise', t_max: int = 20, passo: float = 0.1):
 
     return ues, aps, p, y
 
-'''if __name__ == "__main__":
-    ues, aps, p, y = simulate('noise', t_max=300)
+if __name__ == "__main__":
+    ues, aps, p, y = simulate('interference', t_max=300, passo=0.1)
 
     for i in range(4):
         print(f'UE {i+1}')
@@ -135,4 +135,4 @@ def simulate(cenario: str = 'noise', t_max: int = 20, passo: float = 0.1):
     sum_cap = sum([100*np.log2(1+y[i][-1]) for i in range(4)])
     p_total = sum([p[i][-1] for i in range(len(p))])
     print(f'Sum-capacity: {sum_cap:.4f} Mbps')
-    print(f'Energy Efficiency: {sum_cap/p_total:.4f} bits/Joule')'''
+    print(f'Energy Efficiency: {sum_cap/p_total:.4f} bits/Joule')
