@@ -426,7 +426,7 @@ def simular_experimento(cenario: str, num_simulacoes: int = 1000, p_init: float 
         df_atual = pd.DataFrame(lista_historico_atual)
         
         # Chama função de plotagem
-        #plotar_convergencia_potencia(df_atual, id_simulacao=sim_idx)
+        plotar_convergencia_potencia(df_atual, id_simulacao=sim_idx)
 
     # ==========================================
     # FIM DE TODAS AS SIMULAÇÕES MONTE CARLO
