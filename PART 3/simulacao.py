@@ -84,6 +84,7 @@ def DPC(ues: list, N: int, t_max: int, G: np.ndarray, R: np.ndarray, y_tar: floa
     p = np.ones((len(ues), t_max)) * p_init         # inicializa as potências com p_init para cada UE
     y = np.zeros((len(ues), t_max))                 # vetor para armazenar os SINRs ao longo das iterações
     pn = 1e8*1e-20/N
+    iteracoes = 0
 
     for t in range(t_max):
         for i, ue in enumerate(ues):
@@ -101,12 +102,63 @@ def DPC(ues: list, N: int, t_max: int, G: np.ndarray, R: np.ndarray, y_tar: floa
             if t < t_max - 1:  # Evita atualizar a potência na última iteração
                 p[i][t+1] = pt
 
-        if abs(sum(p[:, t]) - sum(p[:, t-1])) < 1e-3:
-            break
-    return p
+        soma_atual = np.sum(p[:, t+1])
+        soma_anterior = np.sum(p[:, t])
+        iteracoes += 1
 
-def maxsum():
-    pass
+        if iteracoes > 5:
+            if abs(soma_atual - soma_anterior) < 1e-3:
+                break
+    return p[:, 0:iteracoes]
+
+def maxsum(ues: list, passo: float, N: int, t_max: int, G: np.ndarray, R: np.ndarray, p_min: float, p_max: float, p_init: float) -> np.ndarray:
+    # vetor de potencias
+    t_max = 5000
+    passo = 1e-2
+    p = np.ones((len(ues), t_max))          # inicializa as potências com 1W para cada UE
+    p[:, 0] = p_init * np.ones(len(ues))    # define a potência inicial para cada UE
+    y = np.zeros((len(ues), t_max))         # vetor para armazenar os SINRs ao longo das iterações
+    interferences = np.zeros((len(ues), t_max))
+    pn = 1e8*1e-20/N
+    iteracoes = 0
+
+    for t in range(t_max):
+        for i in range(len(ues)):
+            # calcula a interferência total para cada UE
+            interferences[i][t] = sum([p[k][t] * G[k][ues[i].ap.id] * R[k][ues[i].ap.id] for k in range(len(ues)) if k != i]) + pn
+
+        # calcula o SINR para cada UE
+        for i, ue in enumerate(ues):
+            S_i = p[i, t] * ue.gain * R[i, ue.ap.id]  # Sinal útil
+            y[i, t] = S_i / interferences[i, t]
+
+        # loop principal para calcular a potência
+        for k, ue in enumerate(ues):
+            # Calcula a interferência total para este UE
+            I_k = interferences[k][t]
+            ue.interference.append(I_k)
+
+            # path loss e fading
+            g_k = G[k][ue.ap.id]*R[k][ue.ap.id]
+
+            # somatório de y_i/I_i para i != k
+            somatorio = sum([y[i][t] / interferences[i][t] for i in range(len(ues)) if i != k])
+
+            # Atualiza a potência usando o algoritmo de controle de potência
+            pt = min(max(p_min, p[k][t] + passo*g_k*((1/I_k) - somatorio)), p_max)
+
+            if t < t_max - 1:  # Evita atualizar a potência na última iteração
+                p[k][t+1] = pt
+
+        iteracoes += 1
+        if t>=5:
+            soma_atual = np.sum(p[:, t])
+            soma_anterior = np.sum(p[:, t-1])
+
+
+            if abs(soma_atual - soma_anterior) < 1e-3:
+                break
+    return p[:, 0:iteracoes]
 
 def maxprod(ues: list, passo: float, N: int, t_max: int, G: np.ndarray, R: np.ndarray, p_min: float, p_max: float, p_init: float) -> np.ndarray:
     # vetor de potencias
@@ -115,6 +167,7 @@ def maxprod(ues: list, passo: float, N: int, t_max: int, G: np.ndarray, R: np.nd
     y = np.zeros((len(ues), t_max))         # vetor para armazenar os SINRs ao longo das iterações
     interferences = np.zeros((len(ues), t_max))
     pn = 1e8*1e-20/N
+    iteracoes = 0
 
     for t in range(t_max):
         for i in range(len(ues)):
@@ -141,7 +194,14 @@ def maxprod(ues: list, passo: float, N: int, t_max: int, G: np.ndarray, R: np.nd
             if t < t_max - 1:  # Evita atualizar a potência na última iteração
                 p[k][t+1] = pt
 
-    return p
+        if t>0:
+            soma_atual = np.sum(p[:, t])
+            soma_anterior = np.sum(p[:, t-1])
+            iteracoes += 1
+
+            if abs(soma_atual - soma_anterior) < 1e-4:
+                break
+    return p[:, 0:iteracoes]
 
 def SINR(ues: list, N: int, G: np.ndarray, R: np.ndarray) -> float:
     bt=1e8      # avaiable bandwidth
@@ -249,10 +309,52 @@ def plotar_cdfs(df_metricas):
     plt.tight_layout()
     plt.show()
 
-def simular_experimento(cenario: str, num_simulacoes: int = 1000, p_init: float = 1.0, passo: float = 0.1) -> pd.DataFrame:
-    M, K, N = 4, 4, 1
+def comparar_10_percentil(df_metricas):
+    """
+    Calcula e plota o 10º percentil do SINR (dB) e da Capacidade de Canal
+    para avaliar o desempenho dos piores usuários em cada algoritmo.
+    """
+    
+    # 1. Agrupar por algoritmo e calcular o percentil 0.10 (10%)
+    df_10th = df_metricas.groupby('Nome_Algoritmo')[['SINR_dB', 'Capacidade_Canal']].quantile(0.10).reset_index()
+    
+    # 2. Exibir os valores numéricos exatos no terminal para o seu registro
+    print(df_10th.to_string(index=False))
+
+    # 3. Preparar a figura com 2 subgráficos
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    
+    # Dicionário de cores padronizado
+    cores = {'DPC': '#1f77b4', 'MaxSum': '#ff7f0e', 'MaxProd': '#2ca02c'}
+    
+    # --- Gráfico 1: 10th Percentil do SINR (dB) ---
+    # Ordenando do maior (melhor) para o menor
+    ordem_sinr = df_10th.sort_values('SINR_dB', ascending=False)['Nome_Algoritmo']
+    
+    sns.barplot(data=df_10th, x='Nome_Algoritmo', y='SINR_dB', 
+                order=ordem_sinr, palette=cores, ax=axes[0])
+    axes[0].set_title('10º Percentil do SINR')
+    axes[0].set_ylabel('SINR (dB)')
+    axes[0].set_xlabel('Algoritmo')
+    axes[0].grid(axis='y', linestyle='--', alpha=0.7)
+
+    # --- Gráfico 2: 10th Percentil da Capacidade ---
+    # Ordenando do maior (melhor) para o menor
+    ordem_cap = df_10th.sort_values('Capacidade_Canal', ascending=False)['Nome_Algoritmo']
+    
+    sns.barplot(data=df_10th, x='Nome_Algoritmo', y='Capacidade_Canal', 
+                order=ordem_cap, palette=cores, ax=axes[1])
+    axes[1].set_title('10º Percentil da Capacidade')
+    axes[1].set_ylabel('Capacidade (Mbps)')
+    axes[1].set_xlabel('Algoritmo')
+    axes[1].grid(axis='y', linestyle='--', alpha=0.7)
+
+    plt.tight_layout()
+    plt.show()
+
+def simular_experimento(cenario: str, num_simulacoes: int = 1000, p_init: float = 1.0, passo: float = 0.1, M: int = 4, K: int = 4) -> pd.DataFrame:
     p_max, p_min, y_tar = 1.0, 0.001, 1
-    t_limite_maximo = 1000
+    t_limite_maximo = 2000
     L = 1000 if cenario == 'noise' else 100
 
     nomes_algoritmos = ['DPC', 'MaxSum', 'MaxProd']
@@ -260,8 +362,6 @@ def simular_experimento(cenario: str, num_simulacoes: int = 1000, p_init: float 
     # Listas globais para guardar TODOS os dados
     lista_historico_geral = []
     lista_metricas_finais = []
-    
-    print(f"Iniciando {num_simulacoes} simulações com visualização passo a passo...\n")
 
     for sim_idx in range(num_simulacoes):
         aps = distribuir_AP(M, L)
@@ -279,7 +379,7 @@ def simular_experimento(cenario: str, num_simulacoes: int = 1000, p_init: float 
             if nome_alg == 'DPC':
                 p_historico = DPC(ues, N, t_limite_maximo, G, R, y_tar, p_min, p_max, p_init)
             elif nome_alg == 'MaxSum':
-                p_historico = np.full((K, 45), 0.5) 
+                p_historico = maxsum(ues, passo, N, t_limite_maximo, G, R, p_min, p_max, p_init)
             elif nome_alg == 'MaxProd':
                 p_historico = maxprod(ues, passo, N, t_limite_maximo, G, R, p_min, p_max, p_init)
             
@@ -317,33 +417,30 @@ def simular_experimento(cenario: str, num_simulacoes: int = 1000, p_init: float 
                 })
                 
         for ap in aps: ap.ues = []
-
-        # ==========================================
-        # FIM DO LOOP DOS ALGORITMOS PARA ESTE CENÁRIO
-        # ==========================================
         
         # A. Transfere os dados atuais para a lista geral
         lista_historico_geral.extend(lista_historico_atual)
         
-        # B. Transforma a lista atual em DataFrame e plota
+        # B. Transforma a lista atual em DataFrame 
         df_atual = pd.DataFrame(lista_historico_atual)
         
-        # Chama sua função de plotagem (ela vai desenhar e dar plt.show())
-        plotar_convergencia_potencia(df_atual, id_simulacao=sim_idx)
+        # Chama função de plotagem
+        #plotar_convergencia_potencia(df_atual, id_simulacao=sim_idx)
 
     # ==========================================
     # FIM DE TODAS AS SIMULAÇÕES MONTE CARLO
     # ==========================================
-    print("Todas as simulações concluídas! Gerando CDFs globais...")
     
     df_potencias = pd.DataFrame(lista_historico_geral)
     df_metricas = pd.DataFrame(lista_metricas_finais)
     
     # Chama a função para plotar as CDFs finais
     plotar_cdfs(df_metricas)
+
+    comparar_10_percentil(df_metricas)
     
-    return df_potencias, df_metricas
+'''    return df_potencias, df_metricas
 
 if __name__ == "__main__":
     # Roda a simulação completa
-    df_potencias, df_metricas = simular_experimento(cenario='noise', num_simulacoes=5, p_init=0.5, passo=1e-3)
+    df_potencias, df_metricas = simular_experimento(cenario='noise', num_simulacoes=1000, p_init=1, passo=1e-3)'''
