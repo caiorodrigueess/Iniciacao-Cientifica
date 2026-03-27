@@ -353,6 +353,7 @@ def comparar_10_percentil(df_metricas):
     plt.show()
 
 def simular_experimento(cenario: str, num_simulacoes: int = 1000, p_init: float = 1.0, passo: float = 0.1, M: int = 4, K: int = 4) -> pd.DataFrame:
+    N = 1
     p_max, p_min, y_tar = 1.0, 0.001, 1
     t_limite_maximo = 2000
     L = 1000 if cenario == 'noise' else 100
