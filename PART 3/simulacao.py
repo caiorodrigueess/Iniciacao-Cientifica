@@ -114,7 +114,6 @@ def DPC(ues: list, N: int, t_max: int, G: np.ndarray, R: np.ndarray, y_tar: floa
 def maxsum(ues: list, passo: float, N: int, t_max: int, G: np.ndarray, R: np.ndarray, p_min: float, p_max: float, p_init: float) -> np.ndarray:
     # vetor de potencias
     t_max = 5000
-    passo = 1e-2
     p = np.ones((len(ues), t_max))          # inicializa as potências com 1W para cada UE
     p[:, 0] = p_init * np.ones(len(ues))    # define a potência inicial para cada UE
     y = np.zeros((len(ues), t_max))         # vetor para armazenar os SINRs ao longo das iterações
@@ -155,7 +154,6 @@ def maxsum(ues: list, passo: float, N: int, t_max: int, G: np.ndarray, R: np.nda
             soma_atual = np.sum(p[:, t])
             soma_anterior = np.sum(p[:, t-1])
 
-
             if abs(soma_atual - soma_anterior) < 1e-3:
                 break
     return p[:, 0:iteracoes]
@@ -194,10 +192,10 @@ def maxprod(ues: list, passo: float, N: int, t_max: int, G: np.ndarray, R: np.nd
             if t < t_max - 1:  # Evita atualizar a potência na última iteração
                 p[k][t+1] = pt
 
-        if t>0:
+        iteracoes += 1
+        if t>5:
             soma_atual = np.sum(p[:, t])
             soma_anterior = np.sum(p[:, t-1])
-            iteracoes += 1
 
             if abs(soma_atual - soma_anterior) < 1e-4:
                 break
@@ -444,4 +442,4 @@ def simular_experimento(cenario: str, num_simulacoes: int = 1000, p_init: float 
 
 if __name__ == "__main__":
     # Roda a simulação completa
-    df_potencias, df_metricas = simular_experimento(cenario='noise', num_simulacoes=1000, p_init=1, passo=1e-3)'''
+    df_potencias, df_metricas = simular_experimento(cenario='noise', num_simulacoes=5, p_init=1, passo=1e-3)'''
