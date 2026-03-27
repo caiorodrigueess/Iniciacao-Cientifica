@@ -330,6 +330,7 @@ def comparar_10_percentil(df_metricas):
     ordem_sinr = df_10th.sort_values('SINR_dB', ascending=False)['Nome_Algoritmo']
     
     sns.barplot(data=df_10th, x='Nome_Algoritmo', y='SINR_dB', 
+                hue='Nome_Algoritmo', legend=False,
                 order=ordem_sinr, palette=cores, ax=axes[0])
     axes[0].set_title('10º Percentil do SINR')
     axes[0].set_ylabel('SINR (dB)')
@@ -341,6 +342,7 @@ def comparar_10_percentil(df_metricas):
     ordem_cap = df_10th.sort_values('Capacidade_Canal', ascending=False)['Nome_Algoritmo']
     
     sns.barplot(data=df_10th, x='Nome_Algoritmo', y='Capacidade_Canal', 
+                hue='Nome_Algoritmo', legend=False,
                 order=ordem_cap, palette=cores, ax=axes[1])
     axes[1].set_title('10º Percentil da Capacidade')
     axes[1].set_ylabel('Capacidade (Mbps)')
