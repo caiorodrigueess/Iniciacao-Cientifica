@@ -113,7 +113,6 @@ def DPC(ues: list, N: int, t_max: int, G: np.ndarray, R: np.ndarray, y_tar: floa
 
 def maxsum(ues: list, passo: float, N: int, t_max: int, G: np.ndarray, R: np.ndarray, p_min: float, p_max: float, p_init: float, crit_parada: float) -> np.ndarray:
     # vetor de potencias
-    t_max = 5000
     p = np.ones((len(ues), t_max))          # inicializa as potências com 1W para cada UE
     p[:, 0] = p_init * np.ones(len(ues))    # define a potência inicial para cada UE
     y = np.zeros((len(ues), t_max))         # vetor para armazenar os SINRs ao longo das iterações
