@@ -249,6 +249,8 @@ def plotar_convergencia_potencia(df_potencias, id_simulacao=0):
 
     # mudando o ID_UE para começar de 1 ao invés de 0
     df_sim['ID_UE'] = df_sim['ID_UE'] + 1
+    UE_labels = {1: 'UE1', 2: 'UE2', 3: 'UE3', 4: 'UE4'}
+    df_sim['UE'] = df_sim['ID_UE'].map(UE_labels)
     
     # 2. Identifica quais algoritmos estão no DataFrame
     algoritmos = df_sim['Nome_Algoritmo'].unique()
