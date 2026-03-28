@@ -246,6 +246,9 @@ def plotar_convergencia_potencia(df_potencias, id_simulacao=0):
     """
     # 1. Filtra os dados apenas para a simulação desejada
     df_sim = df_potencias[df_potencias['ID_Simulacao'] == id_simulacao]
+
+    # mudando o ID_UE para começar de 1 ao invés de 0
+    df_sim['ID_UE'] = df_sim['ID_UE'] + 1
     
     # 2. Identifica quais algoritmos estão no DataFrame
     algoritmos = df_sim['Nome_Algoritmo'].unique()
@@ -263,7 +266,7 @@ def plotar_convergencia_potencia(df_potencias, id_simulacao=0):
         df_alg = df_sim[df_sim['Nome_Algoritmo'] == alg]
         
         # O parâmetro 'hue' separa automaticamente uma linha de cor diferente para cada UE
-        sns.lineplot(data=df_alg, x='Iteracao', y='Potencia', hue='ID_UE', palette='tab10', ax=ax)
+        sns.lineplot(data=df_alg, x='Iteracao', y='Potencia', hue='UE', palette='tab10', ax=ax)
         
         ax.set_title(f'Convergência - {alg}')
         ax.set_xlabel('Iteração')
