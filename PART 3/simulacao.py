@@ -356,7 +356,7 @@ def comparar_10_percentil(df_metricas):
     plt.tight_layout()
     plt.show()
 
-def convergencia(cenario: str, num_simulacoes: int = 1000, max_iteracoes: int = 2000, crit_parada_maxsum: float = 1e-3, crit_parada_maxprod: float = 1e-3, p_init: float = 1.0, passo_maxsum: float = 0.1, passo_maxprod: float = 0.1, sinr_target: float = 1.0, M: int = 4, K: int = 4) -> pd.DataFrame:
+def simular_experimento(cenario: str, num_simulacoes: int = 1000, max_iteracoes: int = 2000, crit_parada_maxsum: float = 1e-3, crit_parada_maxprod: float = 1e-3, p_init: float = 1.0, passo_maxsum: float = 0.1, passo_maxprod: float = 0.1, sinr_target: float = 1.0, M: int = 4, K: int = 4) -> pd.DataFrame:
     N = 1
     p_max, p_min = 1.0, 0.001
     t_limite_maximo = max_iteracoes
@@ -440,102 +440,12 @@ def convergencia(cenario: str, num_simulacoes: int = 1000, max_iteracoes: int = 
     df_metricas = pd.DataFrame(lista_metricas_finais)
     
     # Chama a função para plotar as CDFs finais
-    #plotar_cdfs(df_metricas)
-
-    #comparar_10_percentil(df_metricas)
-    
-    #return df_potencias, df_metricas
-
-def resultados(cenario: str, num_simulacoes: int = 1000, max_iteracoes: int = 2000, crit_parada_maxsum: float = 1e-3, crit_parada_maxprod: float = 1e-3, p_init: float = 1.0, passo_maxsum: float = 0.1, passo_maxprod: float = 0.1, sinr_target: float = 1.0, M: int = 4, K: int = 4) -> pd.DataFrame:
-    N = 1
-    p_max, p_min = 1.0, 0.001
-    t_limite_maximo = max_iteracoes
-    L = 1000 if cenario == 'noise' else 100
-
-    nomes_algoritmos = ['DPC', 'MaxSum', 'MaxProd']
-    
-    # Listas globais para guardar TODOS os dados
-    lista_historico_geral = []
-    lista_metricas_finais = []
-
-    for sim_idx in range(num_simulacoes):
-        aps = distribuir_AP(M, L)
-        ues = [UE() for _ in range(K)]
-        G = gain_matrix(ues, aps)
-        R = (np.random.rayleigh(scale=1/np.sqrt(2), size=(K, M)))**2
-        attach_AP_UE(ues, aps, G)
-
-        # Lista TEMPORÁRIA para guardar a potência apenas desta simulação
-        lista_historico_atual = [] 
-
-        for nome_alg in nomes_algoritmos:
-            
-            # 1. Executa os algoritmos (mantive os fictícios para o exemplo não quebrar)
-            if nome_alg == 'DPC':
-                p_historico = DPC(ues, N, t_limite_maximo, G, R, sinr_target, p_min, p_max, p_init)
-            elif nome_alg == 'MaxSum':
-                p_historico = maxsum(ues, passo_maxsum, N, t_limite_maximo, G, R, p_min, p_max, p_init, crit_parada_maxsum)
-            elif nome_alg == 'MaxProd':
-                p_historico = maxprod(ues, passo_maxprod, N, t_limite_maximo, G, R, p_min, p_max, p_init, crit_parada_maxprod)
-            
-            iteracoes_reais = p_historico.shape[1]
-            
-            # 2. Salva o histórico de potência desta simulação
-            for ue_idx in range(K):
-                for t in range(iteracoes_reais):
-                    lista_historico_atual.append({
-                        'ID_Simulacao': sim_idx,
-                        'ID_UE': ue_idx,
-                        'Iteracao': t,
-                        'Nome_Algoritmo': nome_alg,
-                        'Potencia': p_historico[ue_idx, t]
-                    })
-            
-            # 3. Salva as métricas finais (normal)
-            p_final = p_historico[:, iteracoes_reais - 1] 
-            for i, ue in enumerate(ues): ue.power = p_final[i]
-                
-            sinr_final = SINR(ues, N, G, R)
-            cap_final = channel_capacity(sinr_final, N)
-            cap_soma = np.sum(cap_final)
-            
-            for i, ue in enumerate(ues):
-                lista_metricas_finais.append({
-                    'ID_Simulacao': sim_idx,
-                    'ID_UE': ue.id,
-                    'Nome_Algoritmo': nome_alg,
-                    'SINR_Linear': float(sinr_final[i]),
-                    'SINR_dB': float(10 * np.log10(sinr_final[i])),
-                    'Capacidade_Canal': float(cap_final[i]),
-                    'Capacidade_Soma': float(cap_soma),
-                    'Potencia': float(p_final[i])
-                })
-                
-        for ap in aps: ap.ues = []
-        
-        # A. Transfere os dados atuais para a lista geral
-        lista_historico_geral.extend(lista_historico_atual)
-        
-        # B. Transforma a lista atual em DataFrame 
-        df_atual = pd.DataFrame(lista_historico_atual)
-        
-        # Chama função de plotagem
-        #plotar_convergencia_potencia(df_atual, id_simulacao=sim_idx)
-
-    # ==========================================
-    # FIM DE TODAS AS SIMULAÇÕES MONTE CARLO
-    # ==========================================
-    
-    df_potencias = pd.DataFrame(lista_historico_geral)
-    df_metricas = pd.DataFrame(lista_metricas_finais)
-    
-    # Chama a função para plotar as CDFs finais
     plotar_cdfs(df_metricas)
 
     comparar_10_percentil(df_metricas)
+    
+'''    return df_potencias, df_metricas
 
-''''
 if __name__ == "__main__":
     # Roda a simulação completa
-    df_potencias, df_metricas = resultados(cenario='noise', num_simulacoes=5, max_iteracoes=2000, crit_parada_maxsum=1e-4, crit_parada_maxprod=1e-4, p_init=1, passo_maxsum=1e-3, passo_maxprod=1e-3, sinr_target=1.0, M=4, K=4)
-    '''
+    df_potencias, df_metricas = simular_experimento(cenario='noise', num_simulacoes=5, max_iteracoes=2000, crit_parada_maxsum=1e-4, crit_parada_maxprod=1e-4, p_init=1, passo_maxsum=1e-3, passo_maxprod=1e-3, sinr_target=1.0, M=4, K=4)'''
