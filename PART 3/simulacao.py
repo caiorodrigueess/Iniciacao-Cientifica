@@ -111,7 +111,7 @@ def DPC(ues: list, N: int, t_max: int, G: np.ndarray, R: np.ndarray, y_tar: floa
                 break
     return p[:, 0:iteracoes]
 
-def maxsum(ues: list, passo: float, N: int, t_max: int, G: np.ndarray, R: np.ndarray, p_min: float, p_max: float, p_init: float) -> np.ndarray:
+def maxsum(ues: list, passo: float, N: int, t_max: int, G: np.ndarray, R: np.ndarray, p_min: float, p_max: float, p_init: float, crit_parada: float) -> np.ndarray:
     # vetor de potencias
     t_max = 5000
     p = np.ones((len(ues), t_max))          # inicializa as potências com 1W para cada UE
@@ -154,11 +154,11 @@ def maxsum(ues: list, passo: float, N: int, t_max: int, G: np.ndarray, R: np.nda
             soma_atual = np.sum(p[:, t])
             soma_anterior = np.sum(p[:, t-1])
 
-            if abs(soma_atual - soma_anterior) < 1e-3:
+            if abs(soma_atual - soma_anterior) < crit_parada:
                 break
     return p[:, 0:iteracoes]
 
-def maxprod(ues: list, passo: float, N: int, t_max: int, G: np.ndarray, R: np.ndarray, p_min: float, p_max: float, p_init: float) -> np.ndarray:
+def maxprod(ues: list, passo: float, N: int, t_max: int, G: np.ndarray, R: np.ndarray, p_min: float, p_max: float, p_init: float, crit_parada: float) -> np.ndarray:
     # vetor de potencias
     p = np.ones((len(ues), t_max))          # inicializa as potências com 1W para cada UE
     p[:, 0] = p_init * np.ones(len(ues))    # define a potência inicial para cada UE
@@ -197,7 +197,7 @@ def maxprod(ues: list, passo: float, N: int, t_max: int, G: np.ndarray, R: np.nd
             soma_atual = np.sum(p[:, t])
             soma_anterior = np.sum(p[:, t-1])
 
-            if abs(soma_atual - soma_anterior) < 1e-4:
+            if abs(soma_atual - soma_anterior) < crit_parada:
                 break
     return p[:, 0:iteracoes]
 
@@ -352,10 +352,10 @@ def comparar_10_percentil(df_metricas):
     plt.tight_layout()
     plt.show()
 
-def simular_experimento(cenario: str, num_simulacoes: int = 1000, p_init: float = 1.0, passo: float = 0.1, M: int = 4, K: int = 4) -> pd.DataFrame:
+def simular_experimento(cenario: str, num_simulacoes: int = 1000, max_iteracoes: int = 2000, crit_parada_maxsum: float = 1e-3, crit_parada_maxprod: float = 1e-3, p_init: float = 1.0, passo_maxsum: float = 0.1, passo_maxprod: float = 0.1, sinr_target: float = 1.0, M: int = 4, K: int = 4) -> pd.DataFrame:
     N = 1
-    p_max, p_min, y_tar = 1.0, 0.001, 1
-    t_limite_maximo = 2000
+    p_max, p_min = 1.0, 0.001
+    t_limite_maximo = max_iteracoes
     L = 1000 if cenario == 'noise' else 100
 
     nomes_algoritmos = ['DPC', 'MaxSum', 'MaxProd']
@@ -378,11 +378,11 @@ def simular_experimento(cenario: str, num_simulacoes: int = 1000, p_init: float 
             
             # 1. Executa os algoritmos (mantive os fictícios para o exemplo não quebrar)
             if nome_alg == 'DPC':
-                p_historico = DPC(ues, N, t_limite_maximo, G, R, y_tar, p_min, p_max, p_init)
+                p_historico = DPC(ues, N, t_limite_maximo, G, R, sinr_target, p_min, p_max, p_init)
             elif nome_alg == 'MaxSum':
-                p_historico = maxsum(ues, passo, N, t_limite_maximo, G, R, p_min, p_max, p_init)
+                p_historico = maxsum(ues, passo_maxsum, N, t_limite_maximo, G, R, p_min, p_max, p_init, crit_parada_maxsum)
             elif nome_alg == 'MaxProd':
-                p_historico = maxprod(ues, passo, N, t_limite_maximo, G, R, p_min, p_max, p_init)
+                p_historico = maxprod(ues, passo_maxprod, N, t_limite_maximo, G, R, p_min, p_max, p_init, crit_parada_maxprod)
             
             iteracoes_reais = p_historico.shape[1]
             
@@ -444,4 +444,4 @@ def simular_experimento(cenario: str, num_simulacoes: int = 1000, p_init: float 
 
 if __name__ == "__main__":
     # Roda a simulação completa
-    df_potencias, df_metricas = simular_experimento(cenario='noise', num_simulacoes=5, p_init=1, passo=1e-3)'''
+    df_potencias, df_metricas = simular_experimento(cenario='noise', num_simulacoes=5, max_iteracoes=2000, crit_parada_maxsum=1e-4, crit_parada_maxprod=1e-4, p_init=1, passo_maxsum=1e-3, passo_maxprod=1e-3, sinr_target=1.0, M=4, K=4)'''
