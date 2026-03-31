@@ -453,7 +453,7 @@ def plot_efiencia_energia(df_metricas):
     
     # Mescla as duas tabelas para exibir um resumo limpo no terminal
     df_resumo = pd.merge(df_10th, df_median, on='Nome_Algoritmo')
-    print("=== Eficiência Energética (bits/Joule) ===")
+    print("=== Eficiência Energética ===")
     print(df_resumo.to_string(index=False))
     print("================================================\n")
 
@@ -466,7 +466,7 @@ def plot_efiencia_energia(df_metricas):
     # --- Gráfico 1: CDF da Eficiência Energética ---
     sns.ecdfplot(data=df_ee, x='Eficiencia_Energetica', hue='Nome_Algoritmo', palette=cores, linewidth=2, ax=axes[0])
     axes[0].set_title('CDF da Eficiência Energética')
-    axes[0].set_xlabel('Eficiência Energética (Mbps/W)')
+    axes[0].set_xlabel('Eficiência Energética (Mbits/Joule)')
     axes[0].set_ylabel('Probabilidade Acumulada')
     axes[0].grid(True, linestyle='--', alpha=0.7)
 
@@ -477,7 +477,7 @@ def plot_efiencia_energia(df_metricas):
                 hue='Nome_Algoritmo', legend=False,
                 order=ordem_10th, palette=cores, ax=axes[1])
     axes[1].set_title('10º Percentil da Eficiência Energética')
-    axes[1].set_ylabel('Eficiência Energética (Mbps/W)')
+    axes[1].set_ylabel('Eficiência Energética (Mbits/Joule)')
     axes[1].set_xlabel('Algoritmo')
     axes[1].grid(axis='y', linestyle='--', alpha=0.7)
 
@@ -488,7 +488,7 @@ def plot_efiencia_energia(df_metricas):
                 hue='Nome_Algoritmo', legend=False,
                 order=ordem_median, palette=cores, ax=axes[2])
     axes[2].set_title('Mediana da Eficiência Energética')
-    axes[2].set_ylabel('Eficiência Energética (bits/Joule)')
+    axes[2].set_ylabel('Eficiência Energética (Mbits/Joule)')
     axes[2].set_xlabel('Algoritmo')
     axes[2].grid(axis='y', linestyle='--', alpha=0.7)
 
