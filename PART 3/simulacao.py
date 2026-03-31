@@ -322,24 +322,25 @@ def plotar_cdfs(df_metricas):
 
 def comparar_10_percentil(df_metricas):
     """
-    Calcula e plota o 10º percentil do SINR (dB) e da Capacidade de Canal
-    para avaliar o desempenho dos piores usuários em cada algoritmo.
+    Calcula e plota o 10º percentil do SINR (dB), da Capacidade de Canal e da Capacidade de Soma
+    para avaliar o desempenho dos piores cenários/usuários em cada algoritmo.
     """
     
-    # 1. Agrupar por algoritmo e calcular o percentil 0.10 (10%)
-    df_10th = df_metricas.groupby('Nome_Algoritmo')[['SINR_dB', 'Capacidade_Canal']].quantile(0.10).reset_index()
+    # 1. Agrupar por algoritmo e calcular o percentil 0.10 (10%) para as três métricas
+    df_10th = df_metricas.groupby('Nome_Algoritmo')[['SINR_dB', 'Capacidade_Canal', 'Capacidade_Soma']].quantile(0.10).reset_index()
     
     # 2. Exibir os valores numéricos exatos no terminal para o seu registro
+    print("=== Comparação 10th percentil ===")
     print(df_10th.to_string(index=False))
+    print("================================================\n")
 
-    # 3. Preparar a figura com 2 subgráficos
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    # 3. Preparar a figura com 3 subgráficos (aumentei a largura para 18 para acomodar bem os 3)
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
     
     # Dicionário de cores padronizado
     cores = {'DPC': '#1f77b4', 'MaxSum': '#ff7f0e', 'MaxProd': '#2ca02c'}
     
     # --- Gráfico 1: 10th Percentil do SINR (dB) ---
-    # Ordenando do maior (melhor) para o menor
     ordem_sinr = df_10th.sort_values('SINR_dB', ascending=False)['Nome_Algoritmo']
     
     sns.barplot(data=df_10th, x='Nome_Algoritmo', y='SINR_dB', 
@@ -351,7 +352,6 @@ def comparar_10_percentil(df_metricas):
     axes[0].grid(axis='y', linestyle='--', alpha=0.7)
 
     # --- Gráfico 2: 10th Percentil da Capacidade ---
-    # Ordenando do maior (melhor) para o menor
     ordem_cap = df_10th.sort_values('Capacidade_Canal', ascending=False)['Nome_Algoritmo']
     
     sns.barplot(data=df_10th, x='Nome_Algoritmo', y='Capacidade_Canal', 
@@ -361,6 +361,136 @@ def comparar_10_percentil(df_metricas):
     axes[1].set_ylabel('Capacidade (Mbps)')
     axes[1].set_xlabel('Algoritmo')
     axes[1].grid(axis='y', linestyle='--', alpha=0.7)
+
+    # --- Gráfico 3: 10th Percentil da Capacidade de Soma ---
+    # Ordenando do maior (melhor) para o menor
+    ordem_soma = df_10th.sort_values('Capacidade_Soma', ascending=False)['Nome_Algoritmo']
+    
+    sns.barplot(data=df_10th, x='Nome_Algoritmo', y='Capacidade_Soma', 
+                hue='Nome_Algoritmo', legend=False,
+                order=ordem_soma, palette=cores, ax=axes[2])
+    axes[2].set_title('10º Percentil da Capacidade de Soma')
+    axes[2].set_ylabel('Capacidade Total (Mbps)')
+    axes[2].set_xlabel('Algoritmo')
+    axes[2].grid(axis='y', linestyle='--', alpha=0.7)
+
+    plt.tight_layout()
+    plt.show()
+
+def comparar_mediana(df_metricas):
+    """
+    Calcula e plota a mediana do SINR (dB), da Capacidade de Canal e da Capacidade de Soma
+    para avaliar o desempenho dos piores usuários em cada algoritmo.
+    """
+    
+    # 1. Agrupar por algoritmo e calcular o percentil 0.50 (50%) para as três métricas
+    df_50th = df_metricas.groupby('Nome_Algoritmo')[['SINR_dB', 'Capacidade_Canal', 'Capacidade_Soma']].quantile(0.50).reset_index()
+    
+    # 2. Exibir os valores numéricos exatos no terminal para o seu registro
+    print("=== Comparação mediana ===")
+    print(df_50th.to_string(index=False))
+    print("================================================\n")
+
+    # 3. Preparar a figura com 3 subgráficos (aumentei a largura para 18 para acomodar bem os 3)
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    
+    # Dicionário de cores padronizado
+    cores = {'DPC': '#1f77b4', 'MaxSum': '#ff7f0e', 'MaxProd': '#2ca02c'}
+    
+    # --- Gráfico 1: 50th Percentil do SINR (dB) ---
+    ordem_sinr = df_50th.sort_values('SINR_dB', ascending=False)['Nome_Algoritmo']
+    
+    sns.barplot(data=df_50th, x='Nome_Algoritmo', y='SINR_dB', 
+                hue='Nome_Algoritmo', legend=False,
+                order=ordem_sinr, palette=cores, ax=axes[0])
+    axes[0].set_title('Mediana do SINR')
+    axes[0].set_ylabel('SINR (dB)')
+    axes[0].set_xlabel('Algoritmo')
+    axes[0].grid(axis='y', linestyle='--', alpha=0.7)
+
+    # --- Gráfico 2: 50th Percentil da Capacidade ---
+    ordem_cap = df_50th.sort_values('Capacidade_Canal', ascending=False)['Nome_Algoritmo']
+    
+    sns.barplot(data=df_50th, x='Nome_Algoritmo', y='Capacidade_Canal', 
+                hue='Nome_Algoritmo', legend=False,
+                order=ordem_cap, palette=cores, ax=axes[1])
+    axes[1].set_title('Mediana da Capacidade')
+    axes[1].set_ylabel('Capacidade (Mbps)')
+    axes[1].set_xlabel('Algoritmo')
+    axes[1].grid(axis='y', linestyle='--', alpha=0.7)
+
+    # --- Gráfico 3: 50th Percentil da Capacidade de Soma ---
+    # Ordenando do maior (melhor) para o menor
+    ordem_soma = df_50th.sort_values('Capacidade_Soma', ascending=False)['Nome_Algoritmo']
+    
+    sns.barplot(data=df_50th, x='Nome_Algoritmo', y='Capacidade_Soma', 
+                hue='Nome_Algoritmo', legend=False,
+                order=ordem_soma, palette=cores, ax=axes[2])
+    axes[2].set_title('Mediana da Capacidade de Soma')
+    axes[2].set_ylabel('Capacidade Total (Mbps)')
+    axes[2].set_xlabel('Algoritmo')
+    axes[2].grid(axis='y', linestyle='--', alpha=0.7)
+
+    plt.tight_layout()
+    plt.show()
+
+def plot_efiencia_energia(df_metricas):
+    """
+    Calcula a Eficiência Energética (Mbps/W) de cada UE e gera os gráficos 
+    comparativos de CDF, 10º Percentil e Mediana para os algoritmos.
+    """
+    
+    # 1. Calcula a Eficiência Energética individual (Capacidade / Potência)
+    df_ee = df_metricas.copy()
+    df_ee['Eficiencia_Energetica'] = df_ee['Capacidade_Canal'] / df_ee['Potencia']
+    
+    # 2. Calcula o 10º Percentil (0.10) e a Mediana (0.50)
+    df_10th = df_ee.groupby('Nome_Algoritmo')['Eficiencia_Energetica'].quantile(0.10).reset_index()
+    df_10th.rename(columns={'Eficiencia_Energetica': 'EE_10th'}, inplace=True)
+    
+    df_median = df_ee.groupby('Nome_Algoritmo')['Eficiencia_Energetica'].median().reset_index()
+    df_median.rename(columns={'Eficiencia_Energetica': 'EE_Mediana'}, inplace=True)
+    
+    # Mescla as duas tabelas para exibir um resumo limpo no terminal
+    df_resumo = pd.merge(df_10th, df_median, on='Nome_Algoritmo')
+    print("=== Eficiência Energética (bits/Joule) ===")
+    print(df_resumo.to_string(index=False))
+    print("================================================\n")
+
+    # 3. Prepara a figura com 3 subgráficos lado a lado
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    
+    # Dicionário de cores para manter o padrão visual
+    cores = {'DPC': '#1f77b4', 'MaxSum': '#ff7f0e', 'MaxProd': '#2ca02c'}
+    
+    # --- Gráfico 1: CDF da Eficiência Energética ---
+    sns.ecdfplot(data=df_ee, x='Eficiencia_Energetica', hue='Nome_Algoritmo', palette=cores, linewidth=2, ax=axes[0])
+    axes[0].set_title('CDF da Eficiência Energética')
+    axes[0].set_xlabel('Eficiência Energética (Mbps/W)')
+    axes[0].set_ylabel('Probabilidade Acumulada')
+    axes[0].grid(True, linestyle='--', alpha=0.7)
+
+    # --- Gráfico 2: 10th Percentil (Piores Usuários) ---
+    ordem_10th = df_10th.sort_values('EE_10th', ascending=False)['Nome_Algoritmo']
+    
+    sns.barplot(data=df_10th, x='Nome_Algoritmo', y='EE_10th', 
+                hue='Nome_Algoritmo', legend=False,
+                order=ordem_10th, palette=cores, ax=axes[1])
+    axes[1].set_title('10º Percentil da Eficiência Energética')
+    axes[1].set_ylabel('Eficiência Energética (Mbps/W)')
+    axes[1].set_xlabel('Algoritmo')
+    axes[1].grid(axis='y', linestyle='--', alpha=0.7)
+
+    # --- Gráfico 3: Mediana (Usuário Intermediário) ---
+    ordem_median = df_median.sort_values('EE_Mediana', ascending=False)['Nome_Algoritmo']
+    
+    sns.barplot(data=df_median, x='Nome_Algoritmo', y='EE_Mediana', 
+                hue='Nome_Algoritmo', legend=False,
+                order=ordem_median, palette=cores, ax=axes[2])
+    axes[2].set_title('Mediana da Eficiência Energética')
+    axes[2].set_ylabel('Eficiência Energética (bits/Joule)')
+    axes[2].set_xlabel('Algoritmo')
+    axes[2].grid(axis='y', linestyle='--', alpha=0.7)
 
     plt.tight_layout()
     plt.show()
@@ -460,12 +590,16 @@ def simular_experimento(cenario: str, num_simulacoes: int = 1000, max_iteracoes:
     df_metricas = pd.DataFrame(lista_metricas_finais)
     
     # Chama a função para plotar as CDFs finais
-    plotar_cdfs(df_metricas)
+    #plotar_cdfs(df_metricas)
 
-    comparar_10_percentil(df_metricas)
+    #comparar_10_percentil(df_metricas)
     
-'''    return df_potencias, df_metricas
+    return df_potencias, df_metricas
 
+'''
 if __name__ == "__main__":
-    # Roda a simulação completa
-    df_potencias, df_metricas = simular_experimento(cenario='interference', num_simulacoes=5, max_iteracoes=10000, crit_parada_maxsum=1e-7, crit_parada_maxprod=1e-7, p_init=1, passo_maxsum=1e-2, passo_maxprod=1e-3, sinr_target=0.1, M=4, K=1)'''
+    df_potencias, df_metricas = simular_experimento(cenario='interference', num_simulacoes=10, max_iteracoes=2000, crit_parada_maxsum=1e-3, crit_parada_maxprod=1e-3, p_init=1.0, passo_maxsum=0.1, passo_maxprod=0.1, sinr_target=1.0, M=4, K=4)
+    plotar_cdfs(df_metricas)
+    comparar_10_percentil(df_metricas)
+    comparar_mediana(df_metricas)
+    plot_efiencia_energia(df_metricas)'''
