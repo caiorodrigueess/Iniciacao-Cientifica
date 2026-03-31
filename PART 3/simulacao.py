@@ -464,8 +464,8 @@ def simular_experimento(cenario: str, num_simulacoes: int = 1000, max_iteracoes:
 
     comparar_10_percentil(df_metricas)
     
-    return df_potencias, df_metricas
+'''    return df_potencias, df_metricas
 
 if __name__ == "__main__":
     # Roda a simulação completa
-    df_potencias, df_metricas = simular_experimento(cenario='interference', num_simulacoes=5, max_iteracoes=10000, crit_parada_maxsum=1e-7, crit_parada_maxprod=1e-7, p_init=1, passo_maxsum=1e-2, passo_maxprod=1e-3, sinr_target=0.1, M=4, K=1)
+    df_potencias, df_metricas = simular_experimento(cenario='interference', num_simulacoes=5, max_iteracoes=10000, crit_parada_maxsum=1e-7, crit_parada_maxprod=1e-7, p_init=1, passo_maxsum=1e-2, passo_maxprod=1e-3, sinr_target=0.1, M=4, K=1)'''
