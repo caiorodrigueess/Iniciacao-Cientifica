@@ -495,7 +495,7 @@ def plot_efiencia_energia(df_metricas):
     plt.tight_layout()
     plt.show()
 
-def simular_experimento(cenario: str, num_simulacoes: int = 1000, max_iteracoes: int = 2000, crit_parada_maxsum: float = 1e-3, crit_parada_maxprod: float = 1e-3, p_init: float = 1.0, passo_maxsum: float = 0.1, passo_maxprod: float = 0.1, sinr_target: float = 1.0, M: int = 4, K: int = 4) -> pd.DataFrame:
+def simular_experimento(printar_convergencia: bool, cenario: str, num_simulacoes: int = 1000, max_iteracoes: int = 2000, crit_parada_maxsum: float = 1e-3, crit_parada_maxprod: float = 1e-3, p_init: float = 1.0, passo_maxsum: float = 0.1, passo_maxprod: float = 0.1, sinr_target: float = 1.0, M: int = 4, K: int = 4) -> pd.DataFrame:
     N = 1
     p_max, p_min = 1.0, 0.001
     t_limite_maximo = max_iteracoes
@@ -580,7 +580,8 @@ def simular_experimento(cenario: str, num_simulacoes: int = 1000, max_iteracoes:
         df_atual = pd.DataFrame(lista_historico_atual)
         
         # Chama função de plotagem
-        plotar_convergencia_potencia(df_atual, id_simulacao=sim_idx)
+        if printar_convergencia:
+            plotar_convergencia_potencia(df_atual, id_simulacao=sim_idx)
 
     # ==========================================
     # FIM DE TODAS AS SIMULAÇÕES MONTE CARLO
@@ -594,7 +595,7 @@ def simular_experimento(cenario: str, num_simulacoes: int = 1000, max_iteracoes:
 
     #comparar_10_percentil(df_metricas)
     
-    return df_potencias, df_metricas
+    return df_metricas
 
 '''
 if __name__ == "__main__":
