@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import copy
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -15,12 +16,13 @@ class AP:
         return f'AP[{self.id}]({self.x}, {self.y})'
 
 class UE:
-    id_counter = 0
-    def __init__(self):
+    id_counter = 1
+    def __init__(self, L: int):
         self.id = UE.id_counter
         UE.id_counter += 1
-        self.x = np.random.randint(0, 1001)
-        self.y = np.random.randint(0, 1001)
+        self.x = np.random.randint(0, L+1)
+        self.y = np.random.randint(0, L+1)
+        self.L = L
         self.ap = None
         self.channel = 0
         self.dist = 0
@@ -47,7 +49,7 @@ def distribuir_AP(M: int, L: int) -> list:
         id += 1
     return APs
 
-def gain_matrix(ues: list, aps: list) -> np.ndarray:
+def gain_matrix(ues: list, aps: list, L: int) -> np.ndarray:
     ''' Inicializa a matriz'''
     G = np.zeros((len(ues), len(aps)))
     ap_coords = np.array([[ap.x, ap.y] for ap in aps])
@@ -55,15 +57,15 @@ def gain_matrix(ues: list, aps: list) -> np.ndarray:
     for i, ue in enumerate(ues):
         # garante que o UE não está a menos de 1 m de nenhum AP
         while True:
-            ue_coord = np.array([ue.x, ue.y])
-            d_all = np.linalg.norm(ap_coords - ue_coord, axis=1)
+            d_all = np.linalg.norm(ap_coords - np.array([ue.x, ue.y]), axis=1)
             if np.all(d_all >= 1):
                 break
-            ue.x = np.random.randint(0, 1001)
-            ue.y = np.random.randint(0, 1001)
+            ue.x = np.random.randint(0, L+1)
+            ue.y = np.random.randint(0, L+1)
 
         # calcula ganhos para todos APs
         for j in range(len(aps)):
+            ue_coord = np.array([ue.x, ue.y])
             d_ij = np.linalg.norm(ue_coord - ap_coords[j])
             d = max(d_ij, 1.0)
             G[i, j] = np.random.lognormal(0, 2) * 1e-4 / (d**4)
@@ -89,7 +91,7 @@ def DPC(ues: list, N: int, t_max: int, G: np.ndarray, R: np.ndarray, y_tar: floa
     for t in range(t_max):
         for i, ue in enumerate(ues):
             # Calcula a interferência total para este UE
-            interference = sum([p[k][t] * G[k][ue.ap.id] * R[k][ue.ap.id] for k in range(len(ues)) if k != i])
+            interference = sum([p[k][t] * G[k][ue.ap.id] * R[k][ue.ap.id] for k in range(len(ues)) if k != i and ues[k].channel == ue.channel])
             ue.interference.append(interference)
 
             # Calcula o SINR para este UE
@@ -102,11 +104,12 @@ def DPC(ues: list, N: int, t_max: int, G: np.ndarray, R: np.ndarray, y_tar: floa
             if t < t_max - 1:  # Evita atualizar a potência na última iteração
                 p[i][t+1] = pt
 
-        soma_atual = np.sum(p[:, t+1])
-        soma_anterior = np.sum(p[:, t])
-        iteracoes += 1
+            #print(f'DPC: UE{i} - Iteração {t} - Potência: {p[i][t]:.4f} W - Ganho: {ue.gain} - SINR: {sinr:.4f} - Interferência: {interference:.4e}')
 
-        if iteracoes > 5:
+        iteracoes += 1
+        if iteracoes > 5 and t < t_max - 1:
+            soma_atual = np.sum(p[:, t+1])
+            soma_anterior = np.sum(p[:, t])
             if abs(soma_atual - soma_anterior) < 1e-3:
                 break
     return p[:, 0:iteracoes]
@@ -147,11 +150,13 @@ def maxsum(ues: list, passo: float, N: int, t_max: int, G: np.ndarray, R: np.nda
 
             if t < t_max - 1:  # Evita atualizar a potência na última iteração
                 p[k][t+1] = pt
+        
+            #print(f'MaxSum: UE{k} - Iteração {t} - Potência: {p[k][t]:.4f} W - Ganho: {ue.gain} - SINR: {y[k][t]:.4f} - Interferência: {interferences[k][t]:.4e}')
 
         iteracoes += 1
-        if t>=5:
-            soma_atual = np.sum(p[:, t])
-            soma_anterior = np.sum(p[:, t-1])
+        if t>=5 and t<t_max-1:
+            soma_atual = np.sum(p[:, t+1])
+            soma_anterior = np.sum(p[:, t])
 
             if abs(soma_atual - soma_anterior) < crit_parada:
                 break
@@ -183,7 +188,7 @@ def maxprod(ues: list, passo: float, N: int, t_max: int, G: np.ndarray, R: np.nd
             sum_I_j = 0
             for j in range(len(ues)):
                 if j != k:
-                    sum_I_j += G[k][ues[j].ap.id]*R[k][ues[j].ap.id]/interferences[j][t]
+                    sum_I_j += G[j][ues[k].ap.id]*R[j][ues[k].ap.id]/interferences[j][t]
 
             # Atualiza a potência usando o algoritmo de controle de potência
             pt = min(max(p_min, p[k][t] + passo*((G[k][ue.ap.id]*R[k][ue.ap.id]/(sinr*I_k)) - sum_I_j)), p_max)
@@ -191,10 +196,12 @@ def maxprod(ues: list, passo: float, N: int, t_max: int, G: np.ndarray, R: np.nd
             if t < t_max - 1:  # Evita atualizar a potência na última iteração
                 p[k][t+1] = pt
 
+            #print(f'MaxProd: UE{k} - Iteração {t} - Potência: {p[k][t]:.4f} W - Ganho: {ue.gain} - SINR: {y[k][t]:.4f} - Interferência: {interferences[k][t]:.4e}')
+
         iteracoes += 1
-        if t>5:
-            soma_atual = np.sum(p[:, t])
-            soma_anterior = np.sum(p[:, t-1])
+        if t>5 and t<t_max-1:
+            soma_atual = np.sum(p[:, t+1])
+            soma_anterior = np.sum(p[:, t])
 
             if abs(soma_atual - soma_anterior) < crit_parada:
                 break
@@ -224,7 +231,7 @@ def SINR(ues: list, N: int, G: np.ndarray, R: np.ndarray) -> float:
         for j, outro_ue in enumerate(ues):
             # se outro UE estiver transmitindo no mesmo canal e for diferente do UE atual, acumula a interferência
             if j != i and outro_ue.channel == ue.channel:
-                interference += G[j, ue.ap.id] * P[j] * R[i, ue.ap.id]
+                interference += G[j, ue.ap.id] * P[j] * R[j, ue.ap.id]
 
         sinr.append(s / (interference + pn))
 
@@ -247,8 +254,10 @@ def plotar_convergencia_potencia(df_potencias, id_simulacao=0):
     df_sim = df_potencias[df_potencias['ID_Simulacao'] == id_simulacao]
 
     # mudando o ID_UE para começar de 1 ao invés de 0
+    #UE_labels = {1: 'UE1', 2: 'UE2', 3: 'UE3', 4: 'UE4'}
+    #df_sim['UE'] = 'UE' + (df_sim['ID_UE'] + 1).astype(str)
     df_sim['ID_UE'] = df_sim['ID_UE'] + 1
-    UE_labels = {1: 'UE1', 2: 'UE2', 3: 'UE3', 4: 'UE4'}
+    UE_labels = {ue_id: f'UE{ue_id}' for ue_id in sorted(df_sim['ID_UE'].unique())}
     df_sim['UE'] = df_sim['ID_UE'].map(UE_labels)
     
     # 2. Identifica quais algoritmos estão no DataFrame
@@ -267,7 +276,7 @@ def plotar_convergencia_potencia(df_potencias, id_simulacao=0):
         df_alg = df_sim[df_sim['Nome_Algoritmo'] == alg]
         
         # O parâmetro 'hue' separa automaticamente uma linha de cor diferente para cada UE
-        sns.lineplot(data=df_alg, x='Iteracao', y='Potencia', hue='UE', palette='tab10', ax=ax)
+        sns.lineplot(data=df_alg, x='Iteracao', y='Potencia', hue='ID_UE', palette='tab10', ax=ax)
         
         ax.set_title(f'Convergência - {alg}')
         ax.set_xlabel('Iteração')
@@ -360,7 +369,11 @@ def simular_experimento(cenario: str, num_simulacoes: int = 1000, max_iteracoes:
     N = 1
     p_max, p_min = 1.0, 0.001
     t_limite_maximo = max_iteracoes
-    L = 1000 if cenario == 'noise' else 100
+    
+    if cenario == 'noise':
+        L = 1000
+    elif cenario == 'interference':
+        L = 100
 
     nomes_algoritmos = ['DPC', 'MaxSum', 'MaxProd']
     
@@ -369,9 +382,10 @@ def simular_experimento(cenario: str, num_simulacoes: int = 1000, max_iteracoes:
     lista_metricas_finais = []
 
     for sim_idx in range(num_simulacoes):
+        UE.id_counter = 1  # Reinicia o contador de IDs para cada simulação
         aps = distribuir_AP(M, L)
-        ues = [UE() for _ in range(K)]
-        G = gain_matrix(ues, aps)
+        ues = [UE(L) for _ in range(K)]
+        G = gain_matrix(ues, aps, L)
         R = (np.random.rayleigh(scale=1/np.sqrt(2), size=(K, M)))**2
         attach_AP_UE(ues, aps, G)
 
@@ -379,14 +393,20 @@ def simular_experimento(cenario: str, num_simulacoes: int = 1000, max_iteracoes:
         lista_historico_atual = [] 
 
         for nome_alg in nomes_algoritmos:
-            
-            # 1. Executa os algoritmos (mantive os fictícios para o exemplo não quebrar)
+            # Usando cópias para garantir que cada algoritmo começa com as mesmas condições iniciais
+            ues_copia = copy.deepcopy(ues)
+            # 1. Executa os algoritmos
             if nome_alg == 'DPC':
-                p_historico = DPC(ues, N, t_limite_maximo, G, R, sinr_target, p_min, p_max, p_init)
+                p_historico = DPC(ues_copia, N, t_limite_maximo, G, R, sinr_target, p_min, p_max, p_init)
+                print('\n')
+
             elif nome_alg == 'MaxSum':
-                p_historico = maxsum(ues, passo_maxsum, N, t_limite_maximo, G, R, p_min, p_max, p_init, crit_parada_maxsum)
+                p_historico = maxsum(ues_copia, passo_maxsum, N, t_limite_maximo, G, R, p_min, p_max, p_init, crit_parada_maxsum)
+                print('\n')
+                
             elif nome_alg == 'MaxProd':
-                p_historico = maxprod(ues, passo_maxprod, N, t_limite_maximo, G, R, p_min, p_max, p_init, crit_parada_maxprod)
+                p_historico = maxprod(ues_copia, passo_maxprod, N, t_limite_maximo, G, R, p_min, p_max, p_init, crit_parada_maxprod)
+                print('\n')
             
             iteracoes_reais = p_historico.shape[1]
             
@@ -403,16 +423,16 @@ def simular_experimento(cenario: str, num_simulacoes: int = 1000, max_iteracoes:
             
             # 3. Salva as métricas finais (normal)
             p_final = p_historico[:, iteracoes_reais - 1] 
-            for i, ue in enumerate(ues): ue.power = p_final[i]
-                
-            sinr_final = SINR(ues, N, G, R)
+            for i, ue in enumerate(ues_copia): ue.power = p_final[i]
+            
+            sinr_final = SINR(ues_copia, N, G, R)
             cap_final = channel_capacity(sinr_final, N)
             cap_soma = np.sum(cap_final)
             
-            for i, ue in enumerate(ues):
+            for i, ue in enumerate(ues_copia):
                 lista_metricas_finais.append({
                     'ID_Simulacao': sim_idx,
-                    'ID_UE': ue.id,
+                    'ID_UE': i,
                     'Nome_Algoritmo': nome_alg,
                     'SINR_Linear': float(sinr_final[i]),
                     'SINR_dB': float(10 * np.log10(sinr_final[i])),
@@ -444,8 +464,8 @@ def simular_experimento(cenario: str, num_simulacoes: int = 1000, max_iteracoes:
 
     comparar_10_percentil(df_metricas)
     
-'''    return df_potencias, df_metricas
+    return df_potencias, df_metricas
 
 if __name__ == "__main__":
     # Roda a simulação completa
-    df_potencias, df_metricas = simular_experimento(cenario='noise', num_simulacoes=5, max_iteracoes=2000, crit_parada_maxsum=1e-4, crit_parada_maxprod=1e-4, p_init=1, passo_maxsum=1e-3, passo_maxprod=1e-3, sinr_target=1.0, M=4, K=4)'''
+    df_potencias, df_metricas = simular_experimento(cenario='interference', num_simulacoes=5, max_iteracoes=10000, crit_parada_maxsum=1e-7, crit_parada_maxprod=1e-7, p_init=1, passo_maxsum=1e-2, passo_maxprod=1e-3, sinr_target=0.1, M=4, K=1)
