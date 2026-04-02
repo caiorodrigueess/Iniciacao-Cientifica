@@ -155,7 +155,7 @@ def maxsum(ues: list, passo: float, N: int, t_max: int, G: np.ndarray, R: np.nda
 
         iteracoes += 1
         if t>5 and t<t_max-1:
-            soma = np.array([abs(np.sum(p[:, j]) - np.sum(p[:, j-1])) for j in range(1, t)])
+            soma = np.array([abs(np.sum(p[:, j]) - np.sum(p[:, j-1])) for j in range(t, t-5, -1)])
 
             if all(soma < crit_parada):
                 break
@@ -199,7 +199,7 @@ def maxprod(ues: list, passo: float, N: int, t_max: int, G: np.ndarray, R: np.nd
 
         iteracoes += 1
         if t>5 and t<t_max-1:
-            soma = np.array([abs(np.sum(p[:, j]) - np.sum(p[:, j-1])) for j in range(1, t)])
+            soma = np.array([abs(np.sum(p[:, j]) - np.sum(p[:, j-1])) for j in range(t, t-5, -1)])
 
             if all(soma < crit_parada):
                 break
@@ -595,7 +595,7 @@ def simular_experimento(printar_convergencia: bool, cenario: str, num_simulacoes
 
 '''
 if __name__ == "__main__":
-    df_metricas = simular_experimento(printar_convergencia=True, cenario='interference', num_simulacoes=1, max_iteracoes=2000, crit_parada_maxsum=1e-3, crit_parada_maxprod=1e-3, p_init=1.0, passo_maxsum=0.1, passo_maxprod=0.01, sinr_target=1.0, M=4, K=4)
+    df_metricas = simular_experimento(printar_convergencia = False, cenario='noise', num_simulacoes=100, max_iteracoes=5000, crit_parada_maxsum=1e-7, crit_parada_maxprod=1e-7, p_init=1, passo_maxsum=1e-3, passo_maxprod=1e-4, sinr_target=0.0718, M=9, K=4)
     plotar_cdfs(df_metricas)
     comparar_10_percentil(df_metricas)
     comparar_mediana(df_metricas)
