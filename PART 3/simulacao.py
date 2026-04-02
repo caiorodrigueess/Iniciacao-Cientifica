@@ -154,11 +154,10 @@ def maxsum(ues: list, passo: float, N: int, t_max: int, G: np.ndarray, R: np.nda
             #print(f'MaxSum: UE{k} - Iteração {t} - Potência: {p[k][t]:.4f} W - Ganho: {ue.gain} - SINR: {y[k][t]:.4f} - Interferência: {interferences[k][t]:.4e}')
 
         iteracoes += 1
-        if t>=5 and t<t_max-1:
-            soma_atual = np.sum(p[:, t+1])
-            soma_anterior = np.sum(p[:, t])
+        if t>5 and t<t_max-1:
+            soma = np.array([abs(np.sum(p[:, j]) - np.sum(p[:, j-1])) for j in range(1, t)])
 
-            if abs(soma_atual - soma_anterior) < crit_parada:
+            if all(soma < crit_parada):
                 break
     return p[:, 0:iteracoes]
 
@@ -200,11 +199,11 @@ def maxprod(ues: list, passo: float, N: int, t_max: int, G: np.ndarray, R: np.nd
 
         iteracoes += 1
         if t>5 and t<t_max-1:
-            soma_atual = np.sum(p[:, t+1])
-            soma_anterior = np.sum(p[:, t])
+            soma = np.array([abs(np.sum(p[:, j]) - np.sum(p[:, j-1])) for j in range(1, t)])
 
-            if abs(soma_atual - soma_anterior) < crit_parada:
+            if all(soma < crit_parada):
                 break
+
     return p[:, 0:iteracoes]
 
 def SINR(ues: list, N: int, G: np.ndarray, R: np.ndarray) -> float:
@@ -528,15 +527,12 @@ def simular_experimento(printar_convergencia: bool, cenario: str, num_simulacoes
             # 1. Executa os algoritmos
             if nome_alg == 'DPC':
                 p_historico = DPC(ues_copia, N, t_limite_maximo, G, R, sinr_target, p_min, p_max, p_init)
-                print('\n')
 
             elif nome_alg == 'MaxSum':
                 p_historico = maxsum(ues_copia, passo_maxsum, N, t_limite_maximo, G, R, p_min, p_max, p_init, crit_parada_maxsum)
-                print('\n')
                 
             elif nome_alg == 'MaxProd':
                 p_historico = maxprod(ues_copia, passo_maxprod, N, t_limite_maximo, G, R, p_min, p_max, p_init, crit_parada_maxprod)
-                print('\n')
             
             iteracoes_reais = p_historico.shape[1]
             
@@ -599,7 +595,7 @@ def simular_experimento(printar_convergencia: bool, cenario: str, num_simulacoes
 
 '''
 if __name__ == "__main__":
-    df_potencias, df_metricas = simular_experimento(cenario='interference', num_simulacoes=10, max_iteracoes=2000, crit_parada_maxsum=1e-3, crit_parada_maxprod=1e-3, p_init=1.0, passo_maxsum=0.1, passo_maxprod=0.1, sinr_target=1.0, M=4, K=4)
+    df_metricas = simular_experimento(printar_convergencia=True, cenario='interference', num_simulacoes=1, max_iteracoes=2000, crit_parada_maxsum=1e-3, crit_parada_maxprod=1e-3, p_init=1.0, passo_maxsum=0.1, passo_maxprod=0.01, sinr_target=1.0, M=4, K=4)
     plotar_cdfs(df_metricas)
     comparar_10_percentil(df_metricas)
     comparar_mediana(df_metricas)
