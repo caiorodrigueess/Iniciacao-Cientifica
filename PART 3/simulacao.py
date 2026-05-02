@@ -354,7 +354,7 @@ def comparar_10_percentil(df_metricas):
     print("================================================\n")
 
     # 3. Preparar a figura com 3 subgráficos (aumentei a largura para 18 para acomodar bem os 3)
-    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3))
     
     # Dicionário de cores padronizado
     cores = {'DPC': '#1f77b4', 'MaxSum': '#ff7f0e', 'MaxProd': '#2ca02c'}
@@ -411,7 +411,7 @@ def comparar_mediana(df_metricas):
     print("================================================\n")
 
     # 3. Preparar a figura com 3 subgráficos (aumentei a largura para 18 para acomodar bem os 3)
-    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     
     # Dicionário de cores padronizado
     cores = {'DPC': '#1f77b4', 'MaxSum': '#ff7f0e', 'MaxProd': '#2ca02c'}
