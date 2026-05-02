@@ -3,7 +3,7 @@ import pandas as pd
 import copy
 import matplotlib.pyplot as plt
 import seaborn as sns
-import tqdm
+from tqdm import tqdm
 
 class AP:
     def __init__(self, x: float, y: float, id: int):
