@@ -243,6 +243,26 @@ def channel_capacity(sinr: list, N: int) -> list:
 
     return capacity_mbps
 
+def plot_APs_UEs(aps: list, ues: list, L: int) -> None:
+    M = len(aps)
+    plt.figure(figsize=(10, 6))
+
+    for ap in aps:
+        plt.scatter(ap.x, ap.y, marker='^', color='blue', label='AP' if ap == aps[0] else "")
+    for ue in ues:
+        plt.scatter(ue.x, ue.y, marker='s', color='red', label='UE')
+        plt.plot([ue.ap.x, ue.x], [ue.ap.y, ue.y], linestyle='-', color='k', linewidth=0.25, )
+
+    plt.xlim(0, L)
+    plt.ylim(0, L)
+    plt.xlabel('x')
+    plt.ylabel('y')
+    plt.title('APs e UEs')
+    dx = L/(np.sqrt(M))
+    plt.xticks(np.arange(0, L+1, dx))
+    plt.yticks(np.arange(0, L+1, dx))
+    plt.grid(True, linestyle='-', alpha=0.5)
+    plt.show()
 
 def plotar_convergencia_potencia(df_potencias, id_simulacao=0):
     """
