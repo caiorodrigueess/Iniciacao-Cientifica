@@ -3,6 +3,7 @@ import pandas as pd
 import copy
 import matplotlib.pyplot as plt
 import seaborn as sns
+import tqdm
 
 class AP:
     def __init__(self, x: float, y: float, id: int):
@@ -569,7 +570,7 @@ def simular_experimento(printar_convergencia: bool, cenario: str, num_simulacoes
     lista_historico_geral = []
     lista_metricas_finais = []
 
-    for sim_idx in range(num_simulacoes):
+    for sim_idx in tqdm(range(num_simulacoes)):
         UE.id_counter = 1  # Reinicia o contador de IDs para cada simulação
         aps = distribuir_AP(M, L)
         ues = [UE(L) for _ in range(K)]
