@@ -327,7 +327,7 @@ def plotar_cdfs(df_metricas):
 
 
     # --- Gráfico 2: CDF da Capacidade de Canal por Usuário ---
-    plt.figure(figsize=(7, 5))
+    plt.figure(figsize=(5, 5))
 
     sns.ecdfplot(
         data=df_metricas,
@@ -353,7 +353,7 @@ def plotar_cdfs(df_metricas):
         ['ID_Simulacao', 'Nome_Algoritmo', 'Capacidade_Soma']
     ].drop_duplicates()
 
-    plt.figure(figsize=(7, 5))
+    plt.figure(figsize=(5, 5))
 
     sns.ecdfplot(
         data=df_soma,
