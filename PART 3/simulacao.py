@@ -354,32 +354,32 @@ def comparar_10_percentil(df_metricas):
     print("================================================\n")
 
     # 3. Preparar a figura com 3 subgráficos (aumentei a largura para 18 para acomodar bem os 3)
-    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
     
     # Dicionário de cores padronizado
     cores = {'DPC': '#1f77b4', 'MaxSum': '#ff7f0e', 'MaxProd': '#2ca02c'}
     
-    # --- Gráfico 1: 10th Percentil do SINR (dB) ---
-    ordem_sinr = df_10th.sort_values('SINR_dB', ascending=False)['Nome_Algoritmo']
-    
-    sns.barplot(data=df_10th, x='Nome_Algoritmo', y='SINR_dB', 
-                hue='Nome_Algoritmo', legend=False,
-                order=ordem_sinr, palette=cores, ax=axes[0])
-    axes[0].set_title('10º Percentil do SINR')
-    axes[0].set_ylabel('SINR (dB)')
-    axes[0].set_xlabel('Algoritmo')
-    axes[0].grid(axis='y', linestyle='--', alpha=0.7)
+    '''    # --- Gráfico 1: 10th Percentil do SINR (dB) ---
+        ordem_sinr = df_10th.sort_values('SINR_dB', ascending=False)['Nome_Algoritmo']
+        
+        sns.barplot(data=df_10th, x='Nome_Algoritmo', y='SINR_dB', 
+                    hue='Nome_Algoritmo', legend=False,
+                    order=ordem_sinr, palette=cores, ax=axes[0])
+        axes[0].set_title('10º Percentil do SINR')
+        axes[0].set_ylabel('SINR (dB)')
+        axes[0].set_xlabel('Algoritmo')
+        axes[0].grid(axis='y', linestyle='--', alpha=0.7)'''
 
     # --- Gráfico 2: 10th Percentil da Capacidade ---
     ordem_cap = df_10th.sort_values('Capacidade_Canal', ascending=False)['Nome_Algoritmo']
     
     sns.barplot(data=df_10th, x='Nome_Algoritmo', y='Capacidade_Canal', 
                 hue='Nome_Algoritmo', legend=False,
-                order=ordem_cap, palette=cores, ax=axes[1])
-    axes[1].set_title('10º Percentil da Capacidade')
-    axes[1].set_ylabel('Capacidade (Mbps)')
-    axes[1].set_xlabel('Algoritmo')
-    axes[1].grid(axis='y', linestyle='--', alpha=0.7)
+                order=ordem_cap, palette=cores, ax=axes[0])
+    axes[0].set_title('10º Percentil da Capacidade')
+    axes[0].set_ylabel('Capacidade (Mbps)')
+    axes[0].set_xlabel('Algoritmo')
+    axes[0].grid(axis='y', linestyle='--', alpha=0.7)
 
     # --- Gráfico 3: 10th Percentil da Capacidade de Soma ---
     # Ordenando do maior (melhor) para o menor
@@ -387,11 +387,11 @@ def comparar_10_percentil(df_metricas):
     
     sns.barplot(data=df_10th, x='Nome_Algoritmo', y='Capacidade_Soma', 
                 hue='Nome_Algoritmo', legend=False,
-                order=ordem_soma, palette=cores, ax=axes[2])
-    axes[2].set_title('10º Percentil da Capacidade de Soma')
-    axes[2].set_ylabel('Capacidade Total (Mbps)')
-    axes[2].set_xlabel('Algoritmo')
-    axes[2].grid(axis='y', linestyle='--', alpha=0.7)
+                order=ordem_soma, palette=cores, ax=axes[1])
+    axes[1].set_title('10º Percentil da Capacidade de Soma')
+    axes[1].set_ylabel('Capacidade Total (Mbps)')
+    axes[1].set_xlabel('Algoritmo')
+    axes[1].grid(axis='y', linestyle='--', alpha=0.7)
 
     plt.tight_layout()
     plt.show()
@@ -411,32 +411,32 @@ def comparar_mediana(df_metricas):
     print("================================================\n")
 
     # 3. Preparar a figura com 3 subgráficos (aumentei a largura para 18 para acomodar bem os 3)
-    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
     
     # Dicionário de cores padronizado
     cores = {'DPC': '#1f77b4', 'MaxSum': '#ff7f0e', 'MaxProd': '#2ca02c'}
     
-    # --- Gráfico 1: 50th Percentil do SINR (dB) ---
-    ordem_sinr = df_50th.sort_values('SINR_dB', ascending=False)['Nome_Algoritmo']
-    
-    sns.barplot(data=df_50th, x='Nome_Algoritmo', y='SINR_dB', 
-                hue='Nome_Algoritmo', legend=False,
-                order=ordem_sinr, palette=cores, ax=axes[0])
-    axes[0].set_title('Mediana do SINR')
-    axes[0].set_ylabel('SINR (dB)')
-    axes[0].set_xlabel('Algoritmo')
-    axes[0].grid(axis='y', linestyle='--', alpha=0.7)
+    '''    # --- Gráfico 1: 50th Percentil do SINR (dB) ---
+        ordem_sinr = df_50th.sort_values('SINR_dB', ascending=False)['Nome_Algoritmo']
+        
+        sns.barplot(data=df_50th, x='Nome_Algoritmo', y='SINR_dB', 
+                    hue='Nome_Algoritmo', legend=False,
+                    order=ordem_sinr, palette=cores, ax=axes[0])
+        axes[0].set_title('Mediana do SINR')
+        axes[0].set_ylabel('SINR (dB)')
+        axes[0].set_xlabel('Algoritmo')
+        axes[0].grid(axis='y', linestyle='--', alpha=0.7)'''
 
     # --- Gráfico 2: 50th Percentil da Capacidade ---
     ordem_cap = df_50th.sort_values('Capacidade_Canal', ascending=False)['Nome_Algoritmo']
     
     sns.barplot(data=df_50th, x='Nome_Algoritmo', y='Capacidade_Canal', 
                 hue='Nome_Algoritmo', legend=False,
-                order=ordem_cap, palette=cores, ax=axes[1])
-    axes[1].set_title('Mediana da Capacidade')
-    axes[1].set_ylabel('Capacidade (Mbps)')
-    axes[1].set_xlabel('Algoritmo')
-    axes[1].grid(axis='y', linestyle='--', alpha=0.7)
+                order=ordem_cap, palette=cores, ax=axes[0])
+    axes[0].set_title('Mediana da Capacidade')
+    axes[0].set_ylabel('Capacidade (Mbps)')
+    axes[0].set_xlabel('Algoritmo')
+    axes[0].grid(axis='y', linestyle='--', alpha=0.7)
 
     # --- Gráfico 3: 50th Percentil da Capacidade de Soma ---
     # Ordenando do maior (melhor) para o menor
@@ -444,11 +444,11 @@ def comparar_mediana(df_metricas):
     
     sns.barplot(data=df_50th, x='Nome_Algoritmo', y='Capacidade_Soma', 
                 hue='Nome_Algoritmo', legend=False,
-                order=ordem_soma, palette=cores, ax=axes[2])
-    axes[2].set_title('Mediana da Capacidade de Soma')
-    axes[2].set_ylabel('Capacidade Total (Mbps)')
-    axes[2].set_xlabel('Algoritmo')
-    axes[2].grid(axis='y', linestyle='--', alpha=0.7)
+                order=ordem_soma, palette=cores, ax=axes[1])
+    axes[1].set_title('Mediana da Capacidade de Soma')
+    axes[1].set_ylabel('Capacidade Total (Mbps)')
+    axes[1].set_xlabel('Algoritmo')
+    axes[1].grid(axis='y', linestyle='--', alpha=0.7)
 
     plt.tight_layout()
     plt.show()
