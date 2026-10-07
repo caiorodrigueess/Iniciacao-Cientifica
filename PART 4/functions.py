@@ -1,7 +1,16 @@
 import random
+from functools import lru_cache
+
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.patches import Wedge, Circle
+from matplotlib.lines import Line2D
 from tqdm import tqdm
+
+
+# Rótulos e cores usados nos gráficos para cada modelo de antena
+MODEL_LABELS = {'omni': 'Omni', 'sector': 'Setorizado', 'smb': 'SMB'}
+MODEL_COLORS = {'omni': 'tab:blue', 'sector': 'tab:orange', 'smb': 'tab:green'}
 
 
 class AP:
@@ -31,6 +40,7 @@ class UE:
                     self.x = np.random.randint(0, 1001)
                     self.y = np.random.randint(0, 1001)
         self.ap = None
+        self.beam = 0   # índice do setor/feixe ativo no AP servidor
         self.channel = 0
         self.dist = 0
         self.angle = 0
@@ -64,41 +74,119 @@ def angle(ue: UE, ap: AP) -> float:
         theta += 2*np.pi
     return theta
 
-def antenna_gain(ues: list, aps: list) -> np.ndarray:
-    theta_boresight = [0, 2*np.pi/3, 4*np.pi/3]  # Ângulos de boresight
-    G = np.ones((len(ues), len(aps), len(theta_boresight))) * 0.01  # Matriz preenchida com ganho mínimo
+def angle_matrix(ues: list, aps: list) -> np.ndarray:
+    """Ângulo (0 a 2*pi) de cada UE i em relação a cada AP j -> matriz (n_ues, n_aps)."""
+    ue_xy = np.array([[ue.x, ue.y] for ue in ues], dtype=float)
+    ap_xy = np.array([[ap.x, ap.y] for ap in aps], dtype=float)
+    dx = ue_xy[:, None, 0] - ap_xy[None, :, 0]
+    dy = ue_xy[:, None, 1] - ap_xy[None, :, 1]
+    return np.mod(np.arctan2(dy, dx), 2*np.pi)
 
-    for i, ue in enumerate(ues):
-        for j, ap in enumerate(aps):
-            theta = angle(ue, ap)
+# ---------------------------------------------------------------------------
+# Switched Multi-Beam (SMB) com Uniform Circular Array (Apêndice A/B)
+# ---------------------------------------------------------------------------
+_LAMBDA = 1.0  # comprimento de onda (o resultado não depende dele: R é proporcional a lambda)
 
-        for k, theta_b in enumerate(theta_boresight):
-            if abs(theta - theta_b) <= np.pi/3:
-                G[i, j, k] = 1.0  # Ganho máximo
-                break
-    return G
+@lru_cache(maxsize=None)
+def _smb_weights(L: int, J: int):
+    """
+    Pré-computa a matriz de pesos W (L x J) do SMB: cada coluna é o vetor
+    de pesos MRC (conjugado do steering vector) apontado para theta_k = k*2*pi/J,
+    normalizado por norm(w), exatamente como no Apêndice B. Calculada uma só vez.
+    """
+    R = L * _LAMBDA / (4*np.pi)
+    phi_el = np.arange(L) * 2*np.pi / L             # posição angular dos elementos
+    theta_k = np.arange(J) * 2*np.pi / J            # direção de apontamento de cada feixe
+    a_tgt = np.exp(1j*2*np.pi/_LAMBDA*R*np.cos(theta_k[None, :] - phi_el[:, None]))  # (L, J)
+    W = np.conj(a_tgt) / np.linalg.norm(a_tgt, axis=0, keepdims=True)
+    return W, phi_el, R
 
-def gain_matrix(ues: list, aps: list, G: np.ndarray) -> np.ndarray:
-    ''' Inicializa a matriz'''
-    gains = np.zeros_like(G)
-    ap_coords = np.array([[ap.x, ap.y] for ap in aps])
+def smb_gains(phi, L: int = 8, J: int = 8) -> np.ndarray:
+    """
+    Função de ganho SMB (Exercício 2, item 2).
 
-    for i, ue in enumerate(ues):
-        ue_coord = np.array([ue.x, ue.y])
-        # calcula ganhos para todos APs
-        for j in range(len(aps)):
-            d_ij = np.linalg.norm(ue_coord - ap_coords[j])
-            d = max(d_ij, 1.0)
-            for k in range(len(G[i, j, :])):
-                gains[i, j, k] = np.random.lognormal(0, 2) * 1e-4 / (d**4) * G[i, j, k]
-    return gains
+    Entrada : phi, azimute(s) UE->AP em radianos (escalar ou array de qualquer shape).
+    Saída   : ganho linear |w_k^T a(phi)|^2 de TODOS os J feixes, shape = phi.shape + (J,).
+    O pico de cada feixe vale L (ex.: 8) e o cruzamento entre feixes vizinhos ~1,82 (L=J=8).
+    """
+    phi = np.asarray(phi, dtype=float)
+    W, phi_el, R = _smb_weights(L, J)
+    flat = phi.ravel()
+    A = np.exp(1j*2*np.pi/_LAMBDA*R*np.cos(flat[None, :] - phi_el[:, None]))  # (L, N)
+    y = W.T @ A                                                               # (J, N)
+    return (np.abs(y)**2).T.reshape(phi.shape + (J,))
+
+def antenna_gain(ues: list, aps: list, model: str = 'sector', beamwidth: float = 2*np.pi/3,
+                  g_min: float = 0.01, L: int = 8, J: int = 8) -> np.ndarray:
+    """
+    Calcula a matriz de ganho de antena G[i, j, b] para cada UE i, AP j e
+    setor/feixe b.
+
+    model:
+      - 'omni'  : antena omnidirecional (ganho unitário, 1 "feixe" por AP)
+      - 'sector': antena setorial ideal (3 setores de 'beamwidth' cada)
+      - 'smb'   : Switched Multi-Beam com UCA de L elementos e J feixes
+                  (G[i, j, :] = ganho dos J feixes do AP j na direção do UE i)
+
+    Cada UE-AP tem seu próprio ângulo relativo, e cada setor/feixe é avaliado
+    individualmente para esse ângulo.
+    """
+    phi = angle_matrix(ues, aps)   # (n_ues, n_aps)
+
+    if model == 'omni':
+        return np.ones((len(ues), len(aps), 1))
+
+    if model == 'sector':
+        theta_boresight = np.array([0, 2*np.pi/3, 4*np.pi/3])  # 3 setores de 120°
+        # Diferença angular com wraparound circular
+        delta = np.abs(phi[:, :, None] - theta_boresight[None, None, :]) % (2*np.pi)
+        delta = np.minimum(delta, 2*np.pi - delta)
+        # Modelo setorial ideal (eq. 3): G = 1 dentro do beamwidth, senão g_min
+        return np.where(delta <= beamwidth/2, 1.0, g_min)
+
+    if model == 'smb':
+        return smb_gains(phi, L=L, J=J)
+
+    raise ValueError(f"Modelo de antena desconhecido: {model!r}")
+
+def gerar_shadowing(ues: list, aps: list) -> np.ndarray:
+    """
+    Sorteia o shadowing log-normal uma única vez por link (UE, AP) -> (n_ues, n_aps).
+    Deve ser gerado UMA vez por rodada de Monte Carlo e reutilizado por todos
+    os modelos de antena (omni, setor, SMB) para uma comparação justa.
+
+    O shadowing é propriedade do link físico UE-AP e NÃO do setor/feixe: todos
+    os setores/feixes de um mesmo AP compartilham o mesmo valor (ele é
+    expandido em gain_matrix). Sortear um valor por feixe faria o UE "escolher"
+    o feixe com melhor shadowing, inflando artificialmente o ganho (mais ainda
+    no SMB, com J=8 feixes).
+    """
+    return np.random.lognormal(0, 2, size=(len(ues), len(aps)))
+
+def gain_matrix(ues: list, aps: list, G: np.ndarray, shadowing: np.ndarray = None) -> np.ndarray:
+    '''
+    Calcula a matriz de ganho de canal (path loss + shadowing + ganho de antena).
+
+    shadowing: matriz (n_ues, n_aps) pré-sorteada (broadcast sobre setores/feixes).
+    Se None, sorteia um novo shadowing (comportamento legado, não recomendado
+    quando se quer comparar modelos de antena sob as mesmas condições).
+    '''
+    if shadowing is None:
+        shadowing = gerar_shadowing(ues, aps)
+    shadowing = np.asarray(shadowing)
+    if shadowing.ndim == 2:
+        shadowing = shadowing[:, :, None]
+
+    ue_xy = np.array([[ue.x, ue.y] for ue in ues], dtype=float)
+    ap_xy = np.array([[ap.x, ap.y] for ap in aps], dtype=float)
+    d = np.linalg.norm(ue_xy[:, None, :] - ap_xy[None, :, :], axis=2)  # (n_ues, n_aps)
+    d = np.maximum(d, 1.0)
+
+    return shadowing * 1e-4 / (d[:, :, None]**4) * G
 
 def alocar_canais_ortogonal(access_points, ues, number_channels, allocation):
     """
     Aloca canais aos UEs de forma ortogonal dentro de cada célula (AP).
-
-    Esta função é uma adaptação do método 'channel_allocation'
-    encontrado em wireless_system.py.
 
     Argumentos:
     access_points (list): A lista de objetos AccessPoint.
@@ -111,7 +199,6 @@ def alocar_canais_ortogonal(access_points, ues, number_channels, allocation):
     """
 
     # 1. Zera os canais de todos os UEs
-    # (Necessário para a lógica de "preenchimento" funcionar)
     for ue in ues:
         ue.channel = None
 
@@ -121,17 +208,14 @@ def alocar_canais_ortogonal(access_points, ues, number_channels, allocation):
         return None
 
     # 2. Inicializa o contador global de uso de canal
-    # (Baseado em wireless_system.py)
     channels = {i: 0 for i in range(1, number_channels + 1)}
 
     # 3. Itera por cada AP para alocação intra-célula
-    # (Baseado em wireless_system.py)
     for ap in access_points:
         available_channels = list(channels.keys())
         random.shuffle(available_channels)
 
         # 4. Itera pelos UEs (por índice) conectados a este AP
-        # (Baseado em wireless_system.py)
         for ue0 in ap.ues:
             if not available_channels:
                 # Para se o AP tiver mais UEs do que canais
@@ -141,13 +225,11 @@ def alocar_canais_ortogonal(access_points, ues, number_channels, allocation):
             channel = available_channels.pop()
 
             # 6. Atribui o canal ao UE e incrementa o contador global
-            # (Baseado em wireless_system.py)
             index_ue = ue0.id
             ues[index_ue].channel = channel
             channels[channel] += 1
 
     # 7. Etapa de Preenchimento (Cleanup)
-    # (Baseado em wireless_system.py)
     for ue in ues:
         if ue.channel is None:
             # Se o UE não recebeu um canal (passo 4),
@@ -156,115 +238,144 @@ def alocar_canais_ortogonal(access_points, ues, number_channels, allocation):
             ue.channel = least_used_channel
             channels[least_used_channel] += 1
 
+def attach_AP_UE(ues: list, aps: list, gains: np.ndarray) -> None:
+    """
+    Initial access: cada UE se associa ao par (AP, setor/feixe) com o MAIOR
+    ganho de canal, entre as M*B combinações (B = nº de setores/feixes por AP:
+    1 no omni, 3 no setorizado, J no SMB).
 
-def attach_AP_UE(ues: list, aps: list, gains: np.ndarray) -> float:
-    ganhos = np.zeros(len(gains[0,0,:]))
+    Guarda em cada UE: ue.ap (AP servidor), ue.beam (setor/feixe ativo) e ue.gain.
+    """
     for i, ue in enumerate(ues):
-        # Encontra o AP com o maior ganho para este UE
-        best_index = np.argmax(gains[i, :])
-        ue.ap = aps[best_index]
-        ue.gain = gains[i, best_index]
+        j, b = np.unravel_index(np.argmax(gains[i]), gains[i].shape)
+        ue.ap = aps[j]
+        ue.beam = int(b)
+        ue.gain = gains[i, j, b]
         ue.dist = np.linalg.norm(np.array([ue.x, ue.y]) - np.array([ue.ap.x, ue.ap.y]))
-        ue.angle = np.arctan2(ue.y - ue.ap.y, ue.x - ue.ap.x)
-        aps[best_index].ues.append(ue)
+        ue.angle = angle(ue, ue.ap)
+        aps[j].ues.append(ue)
 
-def SINR(ues: list, N: int, gains: np.ndarray) -> float:
+def SINR(ues: list, N: int, gains: np.ndarray, G: np.ndarray = None) -> list:
     pt=1        # transmited power
     bt=1e8      # avaiable bandwidth
     k0=1e-20    # constant for the noise power
-
     pn = k0*bt/N
 
     num_ues = len(ues)
 
-    # Coleta os vetores de estado do sistema (extraídos dos objetos)
     # Vetor de Potência (P)
     P = np.array([ue.power for ue in ues])
 
-    # Vetor de Associação de AP (A)
-    # A[k] = índice do AP que serve o UE k
+    # Vetor de Associação de AP (A): A[k] = índice do AP que serve o UE k
     A = np.array([ue.ap.id for ue in ues])
 
-    # Vetor de Alocação de Canal (C)
-    # C[k] = canal (ex: 1, 2, 3...) usado pelo UE k
+    # Vetor de Setor/Feixe ativo (B): B[k] = setor/feixe que serve o UE k
+    B = np.array([ue.beam for ue in ues])
+
+    # Vetor de Alocação de Canal (C): C[k] = canal usado pelo UE k
     C = np.array([ue.channel for ue in ues])
 
     sinr_list = []
 
     # Itera por cada UE 'k' para calcular seu SINR
-    for k in range(num_ues):
+    for k, ue in enumerate(ues):
+        m = A[k]   # AP servidor
+        b = B[k]   # setor/feixe ativo do UE k no AP m
 
-        # 1. Encontrar o AP de serviço para este UE 'k'
-        m = A[k] # m é o índice do AP de serviço
+        # Sinal do UE k no AP m, pelo setor/feixe ativo
+        S = gains[k, m, b] * P[k]
 
-        # 2. Calcular a Potência do Sinal (S)
-        # (Sinal do UE k no AP m)
-        # S = G[k, m] * P[k]
-        S = gains[k, m] * P[k]
-
-        # 3. Calcular a Potência de Interferência (I)
-        # (Soma da potência de todos os *outros* UEs 'i'
-        #  que transmitem no mesmo canal 'C[k]'
-        #  e são recebidos no *nosso* AP 'm')
+        # Interferência: todos os *outros* UEs no mesmo canal, recebidos no AP m
+        # ATRAVÉS DO FEIXE ATIVO b do UE desejado (filtro espacial)
         I = 0.0
         for i in range(num_ues):
-            # A interferência ocorre se:
-            # 1. Não é o próprio UE (i != k)
-            # 2. O UE 'i' está no mesmo canal que o UE 'k' (C[i] == C[k])
-            # (No seu código, a interferência inter-célula é considerada)
             if i != k and C[i] == C[k]:
-                # I += G[i, m] * P[i]
-                I += gains[i, m] * P[i]
+                I += gains[i, m, b] * P[i]
 
-        # 5. Calcular SINR = S / (I + N)
-        sinr = S / (I + pn)
-        sinr_list.append(sinr)
+        sinr_list.append(S / (I + pn))
 
     return sinr_list
 
 def channel_capacity(sinr_valores: list, N: int) -> list:
     # 1. Calcula a largura de banda por canal (B_canal)
-    # (Baseado em wireless_system.py)
     B_per_channel = 1e8 / N
 
-    # 2. Converte a(s) entrada(s) SINR para um array numpy
-    #    para permitir o cálculo elemento a elemento (vetorizado).
+    # 2. Converte a(s) entrada(s) SINR para um array numpy para permitir o cálculo elemento a elemento (vetorizado).
     sinr_array = np.asarray(sinr_valores)
 
     # 3. Aplica a fórmula de Shannon-Hartley
-    # (Baseado em wireless_system.py)
     # C = B * log2(1 + SINR)
     capacity_mbps = B_per_channel * np.log2(1 + sinr_array) / 1e6  # Converte para Mbps
 
     return capacity_mbps
 
-def simular_experimento(M: int, N: int, K: int, sim: int, allocation: str = '') -> tuple:
+def simular_experimento(M: int, N: int, K: int, sim: int, allocation: str = '',
+                        antenna_models: list = ('omni', 'sector', 'smb')) -> dict:
+    """
+    Roda a simulação de Monte Carlo comparando múltiplos modelos de antena
+    SOB AS MESMAS CONDIÇÕES em cada rodada: as posições dos UEs e o
+    shadowing são sorteados uma única vez por rodada e reutilizados em
+    todos os modelos de antena, garantindo uma comparação justa (a única
+    diferença entre os resultados dos modelos é o ganho de antena G,
+    não a aleatoriedade do cenário).
+
+    antenna_models: lista/tupla com os nomes dos modelos a comparar,
+                    ex: ('omni', 'sector', 'smb').
+
+    Retorna um dicionário:
+        {
+          'omni':   {'power': [...], 'sinr': [...], 'cap': [...], 'sum_cap': float},
+          'sector': {...},
+          'smb':    {...},
+        }
+    """
     aps = distribuir_AP(M)  # Mantém a lista fixa de APs
-    sinr = []
-    cap_canal = []
-    ues = []
-    av_sum_cap = []
+
+    resultados = {model: {'power': [], 'sinr': [], 'cap': [], 'sum_cap': []} for model in antenna_models}
 
     for sim_idx in tqdm(range(sim)):
-        UE.id_counter = 0 # Reset UE counter for each simulation
+        UE.id_counter = 0  # Reset UE counter para cada rodada
         ues = [UE(aps) for i in range(K)]
-        sum_cap = 0
-        gains = gain_matrix(ues, aps)
-        attach_AP_UE(ues, aps, gains)
-        alocar_canais_ortogonal(aps, ues, N, allocation)
 
-        s = SINR(ues, N, gains)
-        cap = channel_capacity(s, N)
-        sum_cap = np.sum(cap)
+        # Sorteia o shadowing UMA vez por rodada (por link UE-AP) — será
+        # reutilizado por todos os modelos de antena testados nesta rodada.
+        shadowing = gerar_shadowing(ues, aps)
 
-        sinr.extend(s)
-        cap_canal.extend(cap)
-        av_sum_cap.append(sum_cap)
+        for model in antenna_models:
+            # Reseta o estado de attachment dos UEs/APs para este modelo
+            for ue in ues:
+                ue.ap = None
+                ue.beam = 0
+                ue.channel = 0
+            for ap in aps:
+                ap.ues = []
 
-        for ap in aps:
-            ap.ues = []  # Limpa a lista de UEs para o próximo experimento
+            G = antenna_gain(ues, aps, model=model)
+            gains = gain_matrix(ues, aps, G, shadowing=shadowing)
+            attach_AP_UE(ues, aps, gains)   # initial access: melhor (AP, setor/feixe)
+            #alocar_canais_ortogonal(aps, ues, N, allocation)
 
-    return sinr, cap_canal, np.mean(av_sum_cap)
+            s = SINR(ues, N, gains, G)
+            cap = channel_capacity(s, N)
+            sum_cap = np.sum(cap)
+
+            # Potência recebida no AP/setor/feixe servidor (pt=1, portanto é o
+            # próprio ganho de canal do UE ao seu AP servidor: ue.gain)
+            power = [ue.gain * ue.power for ue in ues]
+
+            resultados[model]['power'].extend(power)
+            resultados[model]['sinr'].extend(s)
+            resultados[model]['cap'].extend(cap)
+            resultados[model]['sum_cap'].append(sum_cap)
+
+            # Limpa a lista de UEs de cada AP antes do próximo modelo/rodada
+            for ap in aps:
+                ap.ues = []
+
+    for model in antenna_models:
+        resultados[model]['sum_cap'] = np.mean(resultados[model]['sum_cap'])
+
+    return resultados
 
 def plot_cdfs(cdf_sinr: list, cdf_capacity: list) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
@@ -300,3 +411,278 @@ def plot_cdfs(cdf_sinr: list, cdf_capacity: list) -> None:
 
     plt.tight_layout()
     plt.show()
+
+def compare_kpis(resultados: dict, load_labels: list, models: list = None) -> None:
+    """
+    Implementa o procedimento do Remark 2: para cada cenário de carga,
+    compara os KPIs do caso omni (baseline) com os demais modelos
+    (setorizado, SMB, ...).
+
+    - SINR (10th percentil): mostrado como ganho relativo em dB em relação
+      ao modelo omni (baseline), fazendo com que o nível do omni seja 0 dB.
+    - Capacidade (10th percentil) e Soma-capacidade média: normalizadas
+      linearmente em relação ao omni (omni = 1, demais = razão).
+
+    resultados: dicionário no formato
+        {
+          'omni':   {K_label: {'sinr': [...], 'cap': [...], 'sum_cap': float}, ...},
+          'sector': {K_label: {...}, ...},
+          'smb':    {K_label: {...}, ...},
+        }
+    load_labels: lista de labels de carga (ex: ['K=1', 'K=4', 'K=8'])
+    models: modelos a plotar (o primeiro deve ser 'omni', baseline).
+            Se None, usa todas as chaves de 'resultados'.
+    """
+    if models is None:
+        models = list(resultados.keys())
+    labels = [MODEL_LABELS.get(m, m) + (' (baseline)' if m == 'omni' else '') for m in models]
+    colors = [MODEL_COLORS.get(m, None) for m in models]
+
+    fig, axes = plt.subplots(2, len(load_labels), figsize=(6*len(load_labels), 9))
+    if len(load_labels) == 1:
+        axes = axes.reshape(2, 1)
+
+    for col, load in enumerate(load_labels):
+        # --- SINR (10th percentil, relativo ao omni em dB) ---
+        # Extrai o SINR do modelo omni e converte para dB
+        base_sinr_db = 10 * np.log10(np.percentile(np.asarray(resultados['omni'][load]['sinr']).flatten(), 10))
+
+        # Subtrai o valor base de todos os modelos para zerar o omni
+        sinr_db_relativo = [
+            10 * np.log10(np.percentile(np.asarray(resultados[m][load]['sinr']).flatten(), 10)) - base_sinr_db
+            for m in models
+        ]
+
+        ax_sinr = axes[0, col]
+        ax_sinr.bar(labels, sinr_db_relativo, color=colors)
+        ax_sinr.set_title(f'Ganho SINR 10th pct ({load})')
+        ax_sinr.set_ylabel('Ganho SINR Relativo (dB)')
+        ax_sinr.axhline(y=0, color='gray', linewidth=0.5)
+        ax_sinr.grid(True, axis='y')
+        ax_sinr.tick_params(axis='x', rotation=15)
+
+        # --- Capacidade (10th percentil) e Soma-capacidade (linear, normalizado) ---
+        base = resultados['omni'][load]
+        cap_base = np.percentile(np.asarray(base['cap']).flatten(), 10)
+        sumcap_base = base['sum_cap']
+
+        metrics = ['Capacidade (10th pct)', 'Soma-capacidade média']
+        x = np.arange(len(metrics))
+        width = 0.8 / len(models)
+
+        ax = axes[1, col]
+        for idx, m in enumerate(models):
+            res = resultados[m][load]
+            vals = [np.percentile(np.asarray(res['cap']).flatten(), 10) / cap_base,
+                    res['sum_cap'] / sumcap_base]
+            offset = (idx - (len(models) - 1)/2) * width
+            ax.bar(x + offset, vals, width, label=labels[idx], color=colors[idx])
+        ax.set_xticks(x)
+        ax.set_xticklabels(metrics, rotation=15)
+        ax.set_title(f'Capacidade normalizada ({load})')
+        ax.axhline(y=0, color='gray', linewidth=0.5)
+        ax.legend()
+        ax.grid(True, axis='y')
+
+    plt.tight_layout()
+    plt.show()
+
+def plot_all_cdfs(resultados_por_carga: dict, load_labels: list, models: list = None) -> None:
+    """
+    Plota as CDFs de potência recebida, SINR e capacidade do canal por UE,
+    comparando as tecnologias de antena (omni, setorizado, SMB) para cada
+    cenário de carga, com marcação dos percentis 10 e 50.
+
+    resultados_por_carga: dicionário no formato
+        {
+          'omni':   {K_label: {'power': [...], 'sinr': [...], 'cap': [...], ...}, ...},
+          'sector': {K_label: {...}, ...},
+          'smb':    {K_label: {...}, ...},
+        }
+    load_labels: lista de labels de carga (ex: ['K=1', 'K=4', 'K=8'])
+    models: modelos a plotar. Se None, usa todas as chaves do dicionário.
+    """
+    if models is None:
+        models = list(resultados_por_carga.keys())
+
+    n_loads = len(load_labels)
+    fig, axes = plt.subplots(n_loads, 3, figsize=(18, 5*n_loads))
+    if n_loads == 1:
+        axes = axes.reshape(1, 3)
+
+    kpi_specs = [
+        ('power', 'Potência Recebida', 'Potência Recebida (dBW)', True),
+        ('sinr',  'SINR',              'SINR (dB)',               True),
+        ('cap',   'Capacidade do Canal', 'Capacidade do Canal (Mbps)', False),
+    ]
+
+    for row, load in enumerate(load_labels):
+        for col, (key, title, xlabel, to_db) in enumerate(kpi_specs):
+            ax = axes[row, col]
+            for model in models:
+                data = np.asarray(resultados_por_carga[model][load][key]).flatten()
+                if to_db:
+                    data = 10*np.log10(data)
+                data = np.sort(data)
+                percentis = np.linspace(0, 1, len(data))
+                ax.plot(data, percentis,
+                        label=MODEL_LABELS.get(model, model),
+                        color=MODEL_COLORS.get(model))
+
+            ax.axhline(y=0.10, color='r', linewidth=0.7, linestyle='--', label='10th Percentil')
+            ax.axhline(y=0.50, color='k', linewidth=0.7, linestyle='--', label='50th Percentil')
+            ax.set_title(f'CDF {title} ({load})')
+            ax.set_xlabel(xlabel)
+            ax.set_ylabel('Percentil')
+            ax.legend(fontsize=8)
+            ax.grid(True)
+
+    plt.tight_layout()
+    plt.show()
+
+
+# ---------------------------------------------------------------------------
+# Visualização espacial: mapa de APs, UEs e setores/feixes
+# ---------------------------------------------------------------------------
+def cenario_aleatorio(M: int, K: int, seed: int = None):
+    """Gera um cenário (aps, ues, shadowing) para visualização. Use 'seed' para reproduzir."""
+    if seed is not None:
+        np.random.seed(seed)
+    aps = distribuir_AP(M)
+    UE.id_counter = 0
+    ues = [UE(aps) for _ in range(K)]
+    shadowing = gerar_shadowing(ues, aps)
+    return aps, ues, shadowing
+
+def plotar_mapa(aps: list, ues: list, shadowing: np.ndarray = None,
+                models: list = ('omni', 'sector', 'smb'), r_ap: float = 110.0,
+                L: int = 8, J: int = 8, show_sinr: bool = True, N: int = 1,
+                savepath: str = None, show: bool = True):
+    """
+    Mapa 2D da área de cobertura, um painel por modelo de antena, todos com
+    OS MESMOS APs, UEs e shadowing (comparação justa).
+
+    - APs: triângulos pretos (com o id).
+    - UEs: círculos coloridos pela cor do AP servidor, ligados a ele por uma linha;
+      o SINR (dB) de cada UE é anotado ao lado (show_sinr=True).
+    - omni  : círculo ao redor do AP.
+    - sector: 3 setores de 120° (setor ativo, que serve algum UE, em cor forte).
+    - smb   : "flor" de J feixes (Fig. 9). Feixes ativos (servindo algum UE)
+              preenchidos e em traço cheio; os demais tracejados em cinza (Fig. 12).
+
+    O attachment é refeito para cada modelo (melhor par AP-setor/feixe). Os canais
+    não são alocados (todos no canal 0), como em simular_experimento com N=1.
+    r_ap: raio (m) do desenho do padrão de antena (apenas visual).
+    """
+    if shadowing is None:
+        shadowing = gerar_shadowing(ues, aps)
+
+    n = len(models)
+    fig, axes = plt.subplots(1, n, figsize=(7.2*n, 7.6), squeeze=False)
+    axes = axes[0]
+    cmap = plt.get_cmap('tab20')
+    sector_colors = ['tab:blue', 'tab:red', 'tab:green']
+    theta_b = [0, 120, 240]  # graus, 3 setores
+    th = np.linspace(0, 2*np.pi, 721)
+    curves = smb_gains(th, L=L, J=J) / L if 'smb' in models else None  # normalizado pelo pico
+
+    for ax, model in zip(axes, models):
+        # Reseta e refaz o attachment para este modelo
+        for ue in ues:
+            ue.ap, ue.beam, ue.channel = None, 0, 0
+        for ap in aps:
+            ap.ues = []
+        G = antenna_gain(ues, aps, model=model, L=L, J=J)
+        gains = gain_matrix(ues, aps, G, shadowing=shadowing)
+        attach_AP_UE(ues, aps, gains)
+        sinr = np.asarray(SINR(ues, N, gains, G)).flatten()
+        sinr_db = 10*np.log10(sinr)
+        ativos = {(ue.ap.id, ue.beam) for ue in ues}
+
+        # --- padrões de antena ---
+        for ap in aps:
+            if model == 'omni':
+                ax.add_patch(Circle((ap.x, ap.y), r_ap*0.7, fc='tab:blue', alpha=0.10,
+                                    ec='tab:blue', lw=0.8, zorder=1))
+            elif model == 'sector':
+                for b in range(3):
+                    ativo = (ap.id, b) in ativos
+                    ax.add_patch(Wedge((ap.x, ap.y), r_ap, theta_b[b]-60, theta_b[b]+60,
+                                       fc=sector_colors[b], alpha=0.50 if ativo else 0.12,
+                                       ec=sector_colors[b], lw=1.0, zorder=1))
+            elif model == 'smb':
+                for k in range(J):
+                    r = r_ap * curves[:, k]
+                    x, y = ap.x + r*np.cos(th), ap.y + r*np.sin(th)
+                    if (ap.id, k) in ativos:
+                        c = plt.cm.hsv(k / J)
+                        ax.fill(x, y, color=c, alpha=0.45, zorder=2)
+                        ax.plot(x, y, color=c, lw=1.6, zorder=2)
+                    else:
+                        ax.plot(x, y, color='gray', lw=0.6, ls='--', alpha=0.7, zorder=1)
+
+        # --- ligações e UEs ---
+        for ue, sdb in zip(ues, sinr_db):
+            c = cmap(ue.ap.id % 20)
+            ax.plot([ue.x, ue.ap.x], [ue.y, ue.ap.y], color=c, lw=1.2, alpha=0.9, zorder=3)
+            ax.scatter(ue.x, ue.y, s=55, color=c, edgecolor='k', linewidth=0.8, zorder=6)
+            if show_sinr:
+                ax.annotate(f'{sdb:.1f} dB', (ue.x, ue.y), xytext=(5, 5),
+                            textcoords='offset points', fontsize=7, zorder=7)
+
+        # --- APs ---
+        for ap in aps:
+            ax.scatter(ap.x, ap.y, marker='^', s=70, color='k', zorder=8)
+            ax.annotate(str(ap.id), (ap.x, ap.y), xytext=(4, -11),
+                        textcoords='offset points', fontsize=7, color='k', zorder=8)
+
+        ax.set_xlim(0, 1000)
+        ax.set_ylim(0, 1000)
+        ax.set_aspect('equal')
+        ax.set_facecolor('#f1f1f1')
+        ax.grid(True, linestyle=':', color='gray', alpha=0.5)
+        ax.set_xlabel('x (m)')
+        ax.set_ylabel('y (m)')
+        ax.set_title(f'{MODEL_LABELS.get(model, model)}  |  SINR médio: {np.mean(sinr_db):.1f} dB')
+
+    handles = [Line2D([], [], marker='^', color='k', ls='', label='AP'),
+               Line2D([], [], marker='o', color='gray', mfc='gray', mec='k', ls='', label='UE (cor = AP servidor)')]
+    if 'sector' in models:
+        handles.append(Line2D([], [], color='tab:red', lw=6, alpha=0.5, label='Setor/feixe ativo'))
+    fig.legend(handles=handles, loc='lower center', ncol=len(handles), frameon=False)
+    plt.tight_layout(rect=(0, 0.04, 1, 1))
+    if savepath:
+        fig.savefig(savepath, dpi=150)
+    if show:
+        plt.show()
+    # return fig
+
+def plot_padroes_smb(configs: list = ((8, 4), (8, 16), (4, 8), (16, 8)),
+                     savepath: str = None, show: bool = True):
+    """
+    Padrões de antena SMB em coordenadas polares para várias combinações (L, J),
+    como na Fig. 9 do roteiro. configs: lista de pares (L, J).
+    O círculo externo corresponde ao ganho de pico G = L.
+    """
+    n = len(configs)
+    cols = 2 if n > 1 else 1
+    rows = int(np.ceil(n / cols))
+    fig, axes = plt.subplots(rows, cols, subplot_kw={'projection': 'polar'},
+                             figsize=(5*cols, 5*rows), squeeze=False)
+    th = np.linspace(0, 2*np.pi, 1000)
+    for ax, (L_, J_) in zip(axes.ravel(), configs):
+        g = smb_gains(th, L=L_, J=J_)
+        for k in range(J_):
+            ax.plot(th, g[:, k], color=plt.cm.hsv(k / J_), lw=1.6)
+        ax.set_ylim(0, L_)
+        ax.set_yticks([L_/2, L_])
+        ax.set_yticklabels([f'{L_/2:g}', f'{L_}'], fontsize=7)
+        ax.set_title(f'L={L_}, J={J_}  (G = {L_})', fontsize=10)
+    for ax in axes.ravel()[n:]:
+        ax.set_visible(False)
+    plt.tight_layout()
+    if savepath:
+        fig.savefig(savepath, dpi=150)
+    if show:
+        plt.show()
+    return fig
