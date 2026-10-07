@@ -9,8 +9,24 @@ from tqdm import tqdm
 
 
 # Rótulos e cores usados nos gráficos para cada modelo de antena
-MODEL_LABELS = {'omni': 'Omni', 'sector': 'Setorizado', 'smb': 'SMB'}
-MODEL_COLORS = {'omni': 'tab:blue', 'sector': 'tab:orange', 'smb': 'tab:green'}
+MODEL_LABELS = {
+    'omni': 'Omni', 
+    'sector': 'Setorizado', 
+    'smb': 'SMB', 
+    'adaptive': 'Adaptativo (Ideal 0°)',
+    'adaptive_1': 'Adaptativo (Erro 1°)',
+    'adaptive_5': 'Adaptativo (Erro 5°)',
+    'adaptive_10': 'Adaptativo (Erro 10°)'
+}
+MODEL_COLORS = {
+    'omni': 'tab:blue', 
+    'sector': 'tab:orange', 
+    'smb': 'tab:green', 
+    'adaptive': 'tab:red',
+    'adaptive_1': 'tab:purple',
+    'adaptive_5': 'tab:brown',
+    'adaptive_10': 'tab:pink'
+}
 
 
 class AP:
@@ -116,6 +132,28 @@ def smb_gains(phi, L: int = 8, J: int = 8) -> np.ndarray:
     y = W.T @ A                                                               # (J, N)
     return (np.abs(y)**2).T.reshape(phi.shape + (J,))
 
+# ---------------------------------------------------------------------------
+# Beamforming adaptativo com MRC (Exercício 3) — mesmo UCA do SMB, pesos em tempo real
+# ---------------------------------------------------------------------------
+def _uca_steering(phi, L: int) -> np.ndarray:
+    """Steering vector a(phi) do UCA de L elementos (Apêndice A). Retorna shape phi.shape + (L,)."""
+    phi = np.asarray(phi, dtype=float)
+    R = L * _LAMBDA / (4*np.pi)
+    phi_el = np.arange(L) * 2*np.pi / L
+    return np.exp(1j*2*np.pi/_LAMBDA*R*np.cos(phi[..., None] - phi_el))
+
+def mrc_gain(phi_beam, phi_user, L: int = 8) -> np.ndarray:
+    """
+    Ganho do feixe MRC apontado para phi_beam, na direção phi_user (broadcast entre os dois):
+        w = conj(a(phi_beam)) / ||a||,   G = |w^T a(phi_user)|^2
+    Com phi_user == phi_beam o ganho é exatamente L (ganho de arranjo máximo, eq. 13).
+    Com phi_beam = k*2*pi/J reproduz o feixe k do SMB (a diferença é só o ponto de apontamento).
+    """
+    a_b = _uca_steering(phi_beam, L)
+    a_u = _uca_steering(phi_user, L)
+    y = np.sum(np.conj(a_b) / np.sqrt(L) * a_u, axis=-1)
+    return np.abs(y)**2
+
 def antenna_gain(ues: list, aps: list, model: str = 'sector', beamwidth: float = 2*np.pi/3,
                   g_min: float = 0.01, L: int = 8, J: int = 8) -> np.ndarray:
     """
@@ -125,23 +163,26 @@ def antenna_gain(ues: list, aps: list, model: str = 'sector', beamwidth: float =
     model:
       - 'omni'  : antena omnidirecional (ganho unitário, 1 "feixe" por AP)
       - 'sector': antena setorial ideal (3 setores de 'beamwidth' cada)
+      - 'adaptive': beamforming adaptativo MRC. Aqui devolve ganho unitário (omni), pois o
+                  initial access usa uma antena isolada do arranjo; o ganho MRC é aplicado
+                  depois, por UE, via adaptive_gains()
       - 'smb'   : Switched Multi-Beam com UCA de L elementos e J feixes
                   (G[i, j, :] = ganho dos J feixes do AP j na direção do UE i)
 
     Cada UE-AP tem seu próprio ângulo relativo, e cada setor/feixe é avaliado
     individualmente para esse ângulo.
     """
+    
     phi = angle_matrix(ues, aps)   # (n_ues, n_aps)
 
-    if model == 'omni':
+    # Verifica se é omni ou qualquer variação do adaptativo (ex: adaptive_5)
+    if model == 'omni' or model.startswith('adaptive'):
         return np.ones((len(ues), len(aps), 1))
 
     if model == 'sector':
         theta_boresight = np.array([0, 2*np.pi/3, 4*np.pi/3])  # 3 setores de 120°
-        # Diferença angular com wraparound circular
         delta = np.abs(phi[:, :, None] - theta_boresight[None, None, :]) % (2*np.pi)
         delta = np.minimum(delta, 2*np.pi - delta)
-        # Modelo setorial ideal (eq. 3): G = 1 dentro do beamwidth, senão g_min
         return np.where(delta <= beamwidth/2, 1.0, g_min)
 
     if model == 'smb':
@@ -151,15 +192,8 @@ def antenna_gain(ues: list, aps: list, model: str = 'sector', beamwidth: float =
 
 def gerar_shadowing(ues: list, aps: list) -> np.ndarray:
     """
-    Sorteia o shadowing log-normal uma única vez por link (UE, AP) -> (n_ues, n_aps).
-    Deve ser gerado UMA vez por rodada de Monte Carlo e reutilizado por todos
-    os modelos de antena (omni, setor, SMB) para uma comparação justa.
-
-    O shadowing é propriedade do link físico UE-AP e NÃO do setor/feixe: todos
-    os setores/feixes de um mesmo AP compartilham o mesmo valor (ele é
-    expandido em gain_matrix). Sortear um valor por feixe faria o UE "escolher"
-    o feixe com melhor shadowing, inflando artificialmente o ganho (mais ainda
-    no SMB, com J=8 feixes).
+    Sorteia o shadowing log-normal de forma independente para cada link (UE, AP).
+    Comportamento original: variável aleatória log-normal(0, 2).
     """
     return np.random.lognormal(0, 2, size=(len(ues), len(aps)))
 
@@ -296,6 +330,44 @@ def SINR(ues: list, N: int, gains: np.ndarray, G: np.ndarray = None) -> list:
 
     return sinr_list
 
+def adaptive_gains(ues: list, aps: list, L: int = 8, aoa_err_deg: float = 0.0) -> np.ndarray:
+    """
+    Beamforming adaptativo MRC (Exercício 3; com aoa_err_deg > 0, Exercício 4).
+    Requer o attachment já feito (ue.ap). Para cada UE k, servido pelo AP m_k, forma um feixe MRC
+    apontado para o AoA (estimado) do UE k:  phi_hat_k = phi[k, m_k] + eps,  eps ~ N(0, aoa_err^2).
+
+    Retorna Gm (n_ues, n_ues) com Gm[k, i] = ganho do feixe do UE k, visto no AP m_k, na direção
+    REAL do UE i. Logo: Gm[k, k] = ganho no UE desejado (= L se aoa_err_deg = 0) e Gm[k, i != k]
+    = ganho aplicado à interferência do UE i sobre o UE k.
+    """
+    n = len(ues)
+    phi = angle_matrix(ues, aps)                       # (n_ues, n_aps)
+    m = np.array([ue.ap.id for ue in ues])             # AP servidor de cada UE
+    phi_hat = phi[np.arange(n), m] + np.deg2rad(aoa_err_deg) * np.random.randn(n)
+    phi_dir = phi[:, m].T                              # phi_dir[k, i] = azimute do UE i no AP m_k
+    return mrc_gain(phi_hat[:, None], phi_dir, L)
+
+def SINR_adaptive(ues: list, N: int, gains: np.ndarray, Gm: np.ndarray) -> list:
+    """
+    SINR com beamforming adaptativo. gains: (n_ues, n_aps, 1) SEM ganho de antena (path loss +
+    shadowing); Gm: saída de adaptive_gains(). Mesma convenção de ruído/interferência de SINR().
+    """
+    bt = 1e8
+    k0 = 1e-20
+    pn = k0*bt/N
+    P = np.array([ue.power for ue in ues])
+    A = np.array([ue.ap.id for ue in ues])
+    C = np.array([ue.channel for ue in ues])
+    sinr_list = []
+    for k in range(len(ues)):
+        m = A[k]
+        S = gains[k, m, 0] * P[k] * Gm[k, k]
+        mask = (C == C[k])
+        mask[k] = False
+        I = np.sum(gains[mask, m, 0] * P[mask] * Gm[k, mask])
+        sinr_list.append(S / (I + pn))
+    return sinr_list
+
 def channel_capacity(sinr_valores: list, N: int) -> list:
     # 1. Calcula a largura de banda por canal (B_canal)
     B_per_channel = 1e8 / N
@@ -310,65 +382,53 @@ def channel_capacity(sinr_valores: list, N: int) -> list:
     return capacity_mbps
 
 def simular_experimento(M: int, N: int, K: int, sim: int, allocation: str = '',
-                        antenna_models: list = ('omni', 'sector', 'smb')) -> dict:
-    """
-    Roda a simulação de Monte Carlo comparando múltiplos modelos de antena
-    SOB AS MESMAS CONDIÇÕES em cada rodada: as posições dos UEs e o
-    shadowing são sorteados uma única vez por rodada e reutilizados em
-    todos os modelos de antena, garantindo uma comparação justa (a única
-    diferença entre os resultados dos modelos é o ganho de antena G,
-    não a aleatoriedade do cenário).
-
-    antenna_models: lista/tupla com os nomes dos modelos a comparar,
-                    ex: ('omni', 'sector', 'smb').
-
-    Retorna um dicionário:
-        {
-          'omni':   {'power': [...], 'sinr': [...], 'cap': [...], 'sum_cap': float},
-          'sector': {...},
-          'smb':    {...},
-        }
-    """
-    aps = distribuir_AP(M)  # Mantém a lista fixa de APs
+                        antenna_models: list = ('omni', 'adaptive', 'adaptive_1', 'adaptive_5', 'adaptive_10'),
+                        shadowing_params: dict = None, L: int = 8, J: int = 8) -> dict:
+    
+    aps = distribuir_AP(M)
 
     resultados = {model: {'power': [], 'sinr': [], 'cap': [], 'sum_cap': []} for model in antenna_models}
 
     for sim_idx in tqdm(range(sim)):
-        UE.id_counter = 0  # Reset UE counter para cada rodada
+        UE.id_counter = 0
         ues = [UE(aps) for i in range(K)]
 
-        # Sorteia o shadowing UMA vez por rodada (por link UE-AP) — será
-        # reutilizado por todos os modelos de antena testados nesta rodada.
         shadowing = gerar_shadowing(ues, aps)
 
         for model in antenna_models:
-            # Reseta o estado de attachment dos UEs/APs para este modelo
             for ue in ues:
-                ue.ap = None
-                ue.beam = 0
-                ue.channel = 0
+                ue.ap, ue.beam, ue.channel = None, 0, 0
             for ap in aps:
                 ap.ues = []
 
-            G = antenna_gain(ues, aps, model=model)
+            G = antenna_gain(ues, aps, model=model, L=L, J=J)
             gains = gain_matrix(ues, aps, G, shadowing=shadowing)
-            attach_AP_UE(ues, aps, gains)   # initial access: melhor (AP, setor/feixe)
-            #alocar_canais_ortogonal(aps, ues, N, allocation)
-
-            s = SINR(ues, N, gains, G)
+            attach_AP_UE(ues, aps, gains)   
+            
+            # --- Lógica de extração de erro para o Exercício 4 ---
+            if model.startswith('adaptive'):
+                err_deg = 0.0
+                if '_' in model: # Se tiver '_', extrai o número que vem depois (ex: 'adaptive_5' -> 5.0)
+                    try:
+                        err_deg = float(model.split('_')[1])
+                    except ValueError:
+                        pass
+                
+                Gm = adaptive_gains(ues, aps, L=L, aoa_err_deg=err_deg)
+                s = SINR_adaptive(ues, N, gains, Gm)
+                power = [ue.gain * ue.power * Gm[k, k] for k, ue in enumerate(ues)]
+            else:
+                s = SINR(ues, N, gains, G)
+                power = [ue.gain * ue.power for ue in ues]
+                
             cap = channel_capacity(s, N)
             sum_cap = np.sum(cap)
-
-            # Potência recebida no AP/setor/feixe servidor (pt=1, portanto é o
-            # próprio ganho de canal do UE ao seu AP servidor: ue.gain)
-            power = [ue.gain * ue.power for ue in ues]
 
             resultados[model]['power'].extend(power)
             resultados[model]['sinr'].extend(s)
             resultados[model]['cap'].extend(cap)
             resultados[model]['sum_cap'].append(sum_cap)
 
-            # Limpa a lista de UEs de cada AP antes do próximo modelo/rodada
             for ap in aps:
                 ap.ues = []
 
@@ -415,23 +475,12 @@ def plot_cdfs(cdf_sinr: list, cdf_capacity: list) -> None:
 def compare_kpis(resultados: dict, load_labels: list, models: list = None) -> None:
     """
     Implementa o procedimento do Remark 2: para cada cenário de carga,
-    compara os KPIs do caso omni (baseline) com os demais modelos
-    (setorizado, SMB, ...).
-
-    - SINR (10th percentil): mostrado como ganho relativo em dB em relação
-      ao modelo omni (baseline), fazendo com que o nível do omni seja 0 dB.
+    compara os KPIs do caso omni (baseline) com os demais modelos.
+    
+    - SINR (10th percentil): mostrado como GANHO em dB em relação ao modelo omni
+      (omni fica nivelado em 0 dB).
     - Capacidade (10th percentil) e Soma-capacidade média: normalizadas
       linearmente em relação ao omni (omni = 1, demais = razão).
-
-    resultados: dicionário no formato
-        {
-          'omni':   {K_label: {'sinr': [...], 'cap': [...], 'sum_cap': float}, ...},
-          'sector': {K_label: {...}, ...},
-          'smb':    {K_label: {...}, ...},
-        }
-    load_labels: lista de labels de carga (ex: ['K=1', 'K=4', 'K=8'])
-    models: modelos a plotar (o primeiro deve ser 'omni', baseline).
-            Se None, usa todas as chaves de 'resultados'.
     """
     if models is None:
         models = list(resultados.keys())
@@ -443,21 +492,19 @@ def compare_kpis(resultados: dict, load_labels: list, models: list = None) -> No
         axes = axes.reshape(2, 1)
 
     for col, load in enumerate(load_labels):
-        # --- SINR (10th percentil, relativo ao omni em dB) ---
-        # Extrai o SINR do modelo omni e converte para dB
-        base_sinr_db = 10 * np.log10(np.percentile(np.asarray(resultados['omni'][load]['sinr']).flatten(), 10))
+        # --- SINR (10th percentil, diferença em dB em relação ao omni) ---
+        base_sinr = np.percentile(np.asarray(resultados['omni'][load]['sinr']).flatten(), 10)
+        base_sinr_db = 10 * np.log10(base_sinr)
 
-        # Subtrai o valor base de todos os modelos para zerar o omni
-        sinr_db_relativo = [
-            10 * np.log10(np.percentile(np.asarray(resultados[m][load]['sinr']).flatten(), 10)) - base_sinr_db
-            for m in models
-        ]
+        # Subtrai o base_sinr_db de todos os modelos (omni será 0 dB)
+        sinr_db = [10*np.log10(np.percentile(np.asarray(resultados[m][load]['sinr']).flatten(), 10)) - base_sinr_db
+                   for m in models]
 
         ax_sinr = axes[0, col]
-        ax_sinr.bar(labels, sinr_db_relativo, color=colors)
-        ax_sinr.set_title(f'Ganho SINR 10th pct ({load})')
-        ax_sinr.set_ylabel('Ganho SINR Relativo (dB)')
-        ax_sinr.axhline(y=0, color='gray', linewidth=0.5)
+        ax_sinr.bar(labels, sinr_db, color=colors)
+        ax_sinr.set_title(f'Ganho de SINR 10th pct ({load})')
+        ax_sinr.set_ylabel('Ganho vs Omni (dB)')
+        ax_sinr.axhline(y=0, color='k', linewidth=0.8, linestyle='--')
         ax_sinr.grid(True, axis='y')
         ax_sinr.tick_params(axis='x', rotation=15)
 
@@ -480,7 +527,7 @@ def compare_kpis(resultados: dict, load_labels: list, models: list = None) -> No
         ax.set_xticks(x)
         ax.set_xticklabels(metrics, rotation=15)
         ax.set_title(f'Capacidade normalizada ({load})')
-        ax.axhline(y=0, color='gray', linewidth=0.5)
+        ax.axhline(y=1.0, color='k', linewidth=0.8, linestyle='--') # Linha base em 1.0 para métricas de razão
         ax.legend()
         ax.grid(True, axis='y')
 
@@ -544,7 +591,7 @@ def plot_all_cdfs(resultados_por_carga: dict, load_labels: list, models: list = 
 # ---------------------------------------------------------------------------
 # Visualização espacial: mapa de APs, UEs e setores/feixes
 # ---------------------------------------------------------------------------
-def cenario_aleatorio(M: int, K: int, seed: int = None):
+def cenario_aleatorio(M: int, K: int, seed: int = None, shadowing_params: dict = None):
     """Gera um cenário (aps, ues, shadowing) para visualização. Use 'seed' para reproduzir."""
     if seed is not None:
         np.random.seed(seed)
@@ -555,24 +602,12 @@ def cenario_aleatorio(M: int, K: int, seed: int = None):
     return aps, ues, shadowing
 
 def plotar_mapa(aps: list, ues: list, shadowing: np.ndarray = None,
-                models: list = ('omni', 'sector', 'smb'), r_ap: float = 110.0,
+                models: list = ('omni', 'sector', 'smb', 'adaptive'), r_ap: float = 110.0,
                 L: int = 8, J: int = 8, show_sinr: bool = True, N: int = 1,
                 savepath: str = None, show: bool = True):
     """
     Mapa 2D da área de cobertura, um painel por modelo de antena, todos com
     OS MESMOS APs, UEs e shadowing (comparação justa).
-
-    - APs: triângulos pretos (com o id).
-    - UEs: círculos coloridos pela cor do AP servidor, ligados a ele por uma linha;
-      o SINR (dB) de cada UE é anotado ao lado (show_sinr=True).
-    - omni  : círculo ao redor do AP.
-    - sector: 3 setores de 120° (setor ativo, que serve algum UE, em cor forte).
-    - smb   : "flor" de J feixes (Fig. 9). Feixes ativos (servindo algum UE)
-              preenchidos e em traço cheio; os demais tracejados em cinza (Fig. 12).
-
-    O attachment é refeito para cada modelo (melhor par AP-setor/feixe). Os canais
-    não são alocados (todos no canal 0), como em simular_experimento com N=1.
-    r_ap: raio (m) do desenho do padrão de antena (apenas visual).
     """
     if shadowing is None:
         shadowing = gerar_shadowing(ues, aps)
@@ -595,7 +630,15 @@ def plotar_mapa(aps: list, ues: list, shadowing: np.ndarray = None,
         G = antenna_gain(ues, aps, model=model, L=L, J=J)
         gains = gain_matrix(ues, aps, G, shadowing=shadowing)
         attach_AP_UE(ues, aps, gains)
-        sinr = np.asarray(SINR(ues, N, gains, G)).flatten()
+        
+        if model.startswith('adaptive'):
+            err_deg = 0.0
+            if '_' in model:
+                try: err_deg = float(model.split('_')[1])
+                except ValueError: pass
+            sinr = np.asarray(SINR_adaptive(ues, N, gains, adaptive_gains(ues, aps, L=L, aoa_err_deg=err_deg))).flatten()
+        else:
+            sinr = np.asarray(SINR(ues, N, gains, G)).flatten()
         sinr_db = 10*np.log10(sinr)
         ativos = {(ue.ap.id, ue.beam) for ue in ues}
 
@@ -621,6 +664,15 @@ def plotar_mapa(aps: list, ues: list, shadowing: np.ndarray = None,
                     else:
                         ax.plot(x, y, color='gray', lw=0.6, ls='--', alpha=0.7, zorder=1)
 
+        # --- feixes MRC adaptativos: um por UE, apontado exatamente para ele ---
+        if model.startswith('adaptive'):
+            for ue in ues:
+                r = r_ap * mrc_gain(ue.angle, th, L) / L
+                x, y = ue.ap.x + r*np.cos(th), ue.ap.y + r*np.sin(th)
+                c = cmap(ue.ap.id % 20)
+                ax.fill(x, y, color=c, alpha=0.45, zorder=2)
+                ax.plot(x, y, color=c, lw=1.6, zorder=2)
+
         # --- ligações e UEs ---
         for ue, sdb in zip(ues, sinr_db):
             c = cmap(ue.ap.id % 20)
@@ -645,12 +697,19 @@ def plotar_mapa(aps: list, ues: list, shadowing: np.ndarray = None,
         ax.set_ylabel('y (m)')
         ax.set_title(f'{MODEL_LABELS.get(model, model)}  |  SINR médio: {np.mean(sinr_db):.1f} dB')
 
+    # --- Tratamento da Legenda ---
     handles = [Line2D([], [], marker='^', color='k', ls='', label='AP'),
                Line2D([], [], marker='o', color='gray', mfc='gray', mec='k', ls='', label='UE (cor = AP servidor)')]
     if 'sector' in models:
-        handles.append(Line2D([], [], color='tab:red', lw=6, alpha=0.5, label='Setor/feixe ativo'))
+        handles.append(Line2D([], [], color='tab:red', lw=6, alpha=0.5, label='Setor ativo'))
+    if 'smb' in models:
+        handles.append(Line2D([], [], color='tab:green', lw=2, alpha=0.5, label='Feixe SMB ativo'))
+    if model.startswith('adaptive'):
+        handles.append(Line2D([], [], color='tab:purple', lw=4, alpha=0.5, label='Feixe MRC (Adaptativo)'))
+
     fig.legend(handles=handles, loc='lower center', ncol=len(handles), frameon=False)
     plt.tight_layout(rect=(0, 0.04, 1, 1))
+    
     if savepath:
         fig.savefig(savepath, dpi=150)
     if show:
